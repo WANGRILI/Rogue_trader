@@ -1,0 +1,36 @@
+RogueTrader
+===========
+
+RogueTrader is a modified derivative of TradingAgents:
+
+  https://github.com/TauricResearch/TradingAgents
+
+The original TradingAgents project is licensed under the Apache License,
+Version 2.0. This repository preserves the Apache License, Version 2.0 in
+LICENSE.
+
+Upstream attribution:
+
+  TradingAgents: Multi-Agents LLM Financial Trading Framework
+  Tauric Research
+  https://tauric.ai/
+  https://github.com/TauricResearch/TradingAgents
+
+RogueTrader modifications include, but are not limited to:
+
+  - Renaming and repackaging the project as RogueTrader.
+  - Adding cryptocurrency-oriented analyst support, including on-chain
+    analysis paths.
+  - Adding DeepSeek/OpenAI-compatible provider configuration.
+  - Adding local crypto data utilities and point-in-time safeguards for
+    local processed data.
+  - Normalizing run outputs under per-run result directories.
+  - Adding structured final decision extraction.
+  - Updating documentation and tests for the modified project behavior.
+
+RogueTrader is not affiliated with, endorsed by, or maintained by Tauric
+Research. TradingAgents and Tauric Research names are used only for upstream
+attribution.
+
+This project is intended for research and analysis. It is not financial,
+investment, or trading advice.
