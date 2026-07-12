@@ -1,7 +1,8 @@
 # RogueTrader: Multi-Agent LLM Crypto & Financial Trading Framework
 
 <p align="center">
-  <img src="assets/RogueTrader.png" style="width: 60%; height: auto;">
+  <a href="README.md">English</a> |
+  <a href="README_zh.md">中文</a>
 </p>
 
 ---

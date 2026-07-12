@@ -1,7 +1,8 @@
 # RogueTrader：多智能体 LLM 加密货币与金融交易框架
 
 <p align="center">
-  <img src="assets/RogueTrader.png" style="width: 60%; height: auto;">
+  <a href="README.md">English</a> |
+  <a href="README_zh.md">中文</a>
 </p>
 
 ---
