@@ -12,6 +12,7 @@ from roguetrader.agents.utils.agent_utils import (
     get_global_news,
     get_language_instruction,
     get_news,
+    render_agent_prompt,
 )
 from roguetrader.dataflows.config import get_config
 
@@ -23,7 +24,7 @@ from roguetrader.dataflows.config import get_config
 # 
 # 返回:
 #     news_analyst_node: 新闻分析师节点函数,接受状态字典并返回分析结果
-def create_news_analyst(llm):
+def create_news_analyst(llm, agent_registry=None):
     def news_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
@@ -34,9 +35,13 @@ def create_news_analyst(llm):
         ]
 
         system_message = (
-            """# Macro & Crypto News Analysis - Including Hidden Power Dynamics
-
-You are RogueTrader's Senior News & Macro Analyst. Your job is to synthesize the past week's news landscape AND analyze the **hidden power dynamics** that impact {ticker}.
+            render_agent_prompt(
+                agent_registry,
+                "news_analyst",
+                "You are RogueTrader's Senior News & Macro Analyst.",
+                "Synthesize recent news and identify hidden power dynamics that impact the instrument.",
+                "Organize findings clearly and separate confirmed facts from inferred narratives.",
+                """# Macro & Crypto News Analysis - Including Hidden Power Dynamics
 
 ## Your Approach
 Analyze along multiple dimensions:
@@ -61,8 +66,9 @@ Analyze along multiple dimensions:
 - What are concrete actionable conclusions accounting for both surface news AND hidden agendas?
 
 Organize your findings into a structured report with clear section headings. End with a summary table highlighting key events, narratives, and their expected impact.
-"""
-            + get_language_instruction(),
+""",
+            )
+            + get_language_instruction()
         )
 
         prompt = ChatPromptTemplate.from_messages(

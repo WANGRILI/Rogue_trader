@@ -18,12 +18,12 @@ ProviderModeOptions = Dict[str, Dict[str, List[ModelOption]]]
 MODEL_OPTIONS: ProviderModeOptions = {
     "deepseek": {
         "quick": [
-            ("DeepSeek Chat - Fast and cost-effective", "deepseek-chat"),
-            ("DeepSeek Reasoner - Stronger reasoning", "deepseek-reasoner"),
+            ("DeepSeek V4 Flash - Fast and cost-effective", "deepseek-v4-flash"),
+            ("DeepSeek V4 Pro - Stronger reasoning", "deepseek-v4-pro"),
         ],
         "deep": [
-            ("DeepSeek Reasoner - Stronger reasoning", "deepseek-reasoner"),
-            ("DeepSeek Chat - Fast and cost-effective", "deepseek-chat"),
+            ("DeepSeek V4 Pro - Stronger reasoning", "deepseek-v4-pro"),
+            ("DeepSeek V4 Flash - Fast and cost-effective", "deepseek-v4-flash"),
         ],
     },
     "openai": {

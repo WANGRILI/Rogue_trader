@@ -2,10 +2,10 @@ import functools
 import time
 import json
 
-from roguetrader.agents.utils.agent_utils import build_instrument_context
+from roguetrader.agents.utils.agent_utils import build_instrument_context, render_agent_prompt
 
 
-def create_trader(llm, memory):
+def create_trader(llm, memory, agent_registry=None):
     def trader_node(state, name):
         company_name = state["company_of_interest"]
         instrument_context = build_instrument_context(company_name)
@@ -31,10 +31,19 @@ def create_trader(llm, memory):
             "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. {instrument_context} This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
         }
 
+        system_prompt = render_agent_prompt(
+            agent_registry,
+            "trader",
+            "You are a trading agent analyzing market data to make investment decisions.",
+            "Evaluate the research plan and provide a specific recommendation to buy, sell, or hold.",
+            "End with a firm decision and always conclude with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**'.",
+            f"""Based on your analysis, provide a specific recommendation to buy, sell, or hold. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**' to confirm your recommendation. Apply lessons from past decisions to strengthen your analysis. Here are reflections from similar situations you traded in and the lessons learned: {past_memory_str}""",
+        )
+
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trading agent analyzing market data to make investment decisions. Based on your analysis, provide a specific recommendation to buy, sell, or hold. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**' to confirm your recommendation. Apply lessons from past decisions to strengthen your analysis. Here are reflections from similar situations you traded in and the lessons learned: {past_memory_str}""",
+                "content": system_prompt,
             },
             context,
         ]

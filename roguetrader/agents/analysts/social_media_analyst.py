@@ -12,6 +12,7 @@ from roguetrader.agents.utils.agent_utils import (
     get_language_instruction,
     get_news,
     get_crypto_sentiment,
+    render_agent_prompt,
 )
 from roguetrader.dataflows.config import get_config
 
@@ -37,7 +38,7 @@ def _is_crypto_ticker(ticker: str) -> bool:
 # 
 # 返回:
 #     social_media_analyst_node: 社交媒体分析师节点函数,接受状态字典并返回分析结果
-def create_social_media_analyst(llm):
+def create_social_media_analyst(llm, agent_registry=None):
     def social_media_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
@@ -60,9 +61,13 @@ def create_social_media_analyst(llm):
 """
 
         system_message = (
-            f"""# Social Sentiment & Narrative Warfare Analysis
-
-You are RogueTrader's Social Media & Narrative Analyst. Analyze not just raw sentiment, but **who is controlling the narrative** for {state['company_of_interest']}.
+            render_agent_prompt(
+                agent_registry,
+                "social_media_analyst",
+                "You are RogueTrader's Social Media & Narrative Analyst.",
+                "Analyze raw sentiment, narrative control, coordinated campaigns, and who benefits from the current narrative.",
+                "Separate organic sentiment from coordinated narrative and explain trading implications.",
+                f"""# Social Sentiment & Narrative Warfare Analysis
 
 ## Your Analysis
 ### 1. **Data Collection**:
@@ -84,7 +89,9 @@ You are RogueTrader's Social Media & Narrative Analyst. Analyze not just raw sen
 - Can we trade with the current narrative or should we fade it?
 
 Deliver a comprehensive report with key insights summarized in a table at the end that separates organic sentiment from coordinated narrative.
-""" + get_language_instruction()
+""",
+            )
+            + get_language_instruction()
         )
 
         prompt = ChatPromptTemplate.from_messages(

@@ -1,8 +1,10 @@
 import time
 import json
 
+from roguetrader.agents.utils.agent_utils import render_agent_prompt
 
-def create_neutral_debator(llm):
+
+def create_neutral_debator(llm, agent_registry=None):
     def neutral_node(state) -> dict:
         risk_debate_state = state["risk_debate_state"]
         history = risk_debate_state.get("history", "")
@@ -19,7 +21,13 @@ def create_neutral_debator(llm):
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies. Here is the trader's decision:
+        prompt = render_agent_prompt(
+            agent_registry,
+            "neutral_risk_analyst",
+            "You are the Neutral Risk Analyst.",
+            "Provide a balanced perspective that weighs upside, downside, broader trends, and diversification.",
+            "Challenge both aggressive and conservative arguments while staying practical and moderate.",
+            f"""Your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies. Here is the trader's decision:
 
 {trader_decision}
 
@@ -32,7 +40,8 @@ Company Fundamentals Report: {fundamentals_report}
 On-chain Analysis Report: {onchain_report}
 Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the conservative analyst: {current_conservative_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
 
-Engage actively by analyzing both sides critically, addressing weaknesses in the aggressive and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
+Engage actively by analyzing both sides critically, addressing weaknesses in the aggressive and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting.""",
+        )
 
         response = llm.invoke(prompt)
 

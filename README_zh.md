@@ -133,7 +133,7 @@ RogueTrader 通过统一的工厂模式支持 **7 个 LLM 提供商**：
 
 | 提供商 | 快速模型 | 深度模型 | API 地址 |
 |--------|----------|----------|----------|
-| **DeepSeek ★**（默认） | `deepseek-chat` | `deepseek-reasoner` | `api.deepseek.com` |
+| **DeepSeek ★**（默认） | `deepseek-v4-flash` | `deepseek-v4-pro` | `api.deepseek.com` |
 | **OpenAI** | GPT-5.4 Mini/Nano, GPT-4.1 | GPT-5.4, GPT-5.2, GPT-5.4 Pro | `api.openai.com` |
 | **Anthropic** | Claude Sonnet 4.6, Haiku 4.5 | Claude Opus 4.6, Sonnet 4.6 | `api.anthropic.com` |
 | **Google** | Gemini 3 Flash, 2.5 Flash | Gemini 3.1 Pro, 2.5 Pro | Google AI |
@@ -141,21 +141,48 @@ RogueTrader 通过统一的工厂模式支持 **7 个 LLM 提供商**：
 | **OpenRouter** | NVIDIA Nemotron, GLM 4.5 | 同上（免费层） | `openrouter.ai` |
 | **Ollama** | Qwen3, GPT-OSS, GLM-4.7 | 同上（本地运行） | `localhost:11434` |
 
-> **为什么默认用 DeepSeek：** 兼容 OpenAI API 格式，成本远低于 GPT，同时 `deepseek-reasoner` 提供强大的推理能力。所有调用走标准 Chat Completions 接口，不依赖 Responses API。
+> **为什么默认用 DeepSeek：** 兼容 OpenAI API 格式，成本远低于 GPT，同时使用 `deepseek-v4-pro` 处理深度推理，使用 `deepseek-v4-flash` 处理常规 Agent 任务。
 
 ### 双模型策略
 
 ```
-深度思考模型（deepseek-reasoner）
+深度思考模型（deepseek-v4-pro）
   ├── 研究经理（投资辩论裁判，需要深度综合）
   └── 投资组合经理（风控辩论裁判 + 最终决策）
 
-快速思考模型（deepseek-chat）
+快速思考模型（deepseek-v4-flash）
   ├── 全部 5 个分析师（数据采集 + 报告生成）
   ├── 多头/空头研究员（辩论发言）
   ├── 交易员（方案综合）
   └── 风控三人组（激进/保守/中立）
 ```
+
+### Agent 配置文件
+
+RogueTrader 支持一个面向小白用户的 Agent 配置文件：
+
+```bash
+configs/agents.yaml
+```
+
+你可以在这里调整每个 Agent 使用的模型路线和身份设定，而不需要改 Python 代码：
+
+```yaml
+agents:
+  onchain_analyst:
+    llm:
+      tier: quick
+      model: deepseek-v4-flash
+    prompt:
+      identity: |
+        You are RogueTrader's Lead On-Chain Analyst specializing in crypto assets.
+      focus: |
+        Focus on whale behavior, DeFi liquidity, stablecoin flows, derivatives positioning, and manipulation risk.
+      style: |
+        Explain conclusions in practical trading language, not only raw metrics.
+```
+
+不需要配置所有 Agent。缺失字段会自动回退到代码内置默认值。做 A/B 测试时，可以通过 `ROGUETRADER_AGENT_CONFIG=/path/to/agents.yaml` 加载另一份配置。
 
 ---
 
@@ -245,7 +272,11 @@ RogueTrader/
 │       ├── anthropic_client.py       # Anthropic Claude
 │       ├── google_client.py          # Google Gemini
 │       ├── model_catalog.py          # 统一模型目录（6 个提供商 × 2 种模式）
+│       ├── agent_registry.py         # 单个 Agent 的模型路由和身份配置
 │       └── validators.py             # 模型验证逻辑
+│
+├── configs/
+│   └── agents.yaml                   # 可选：单个 Agent 的身份和模型配置
 │
 ├── cli/                              # 交互式终端界面
 │   ├── main.py                       # 基于 Rich/Typer 的 TUI（8 步向导）
@@ -257,7 +288,7 @@ RogueTrader/
 │   └── static/welcome.txt            # ASCII 艺术欢迎画面
 │
 ├── my_scripts/                       # ★ 个人运行脚本
-│   └── roguetrader1.py              # DeepSeek 配置 + ETH 链上分析示例
+│   └── roguetrader1.py              # DeepSeek 配置 + BTC 完整多智能体示例
 │
 ├── my_results/                       # ★ 个人运行输出
 │   ├── 运行结果/
@@ -339,7 +370,7 @@ uv run --frozen roguetrader --help
 uv run --frozen roguetrader analyze --help
 ```
 
-当前基线是 **19 个测试通过**。测试覆盖范围包括：模型/Provider 校验、CLI 行为、输出路径规范化、链上分析师接线、Graph 初始化、OpenAI-compatible 客户端配置、本地 Parquet 数据按分析日期截断、ticker 处理、快速入口配置，以及最终交易信号的确定性提取。
+当前基线是 **24 个测试通过**。测试覆盖范围包括：模型/Provider 校验、Agent 注册配置、CLI 行为、输出路径规范化、链上分析师接线、Graph 初始化、OpenAI-compatible 客户端配置、本地 Parquet 数据按分析日期截断、ticker 处理、快速入口配置，以及最终交易信号的确定性提取。
 
 ---
 
@@ -368,24 +399,24 @@ CLI 将引导你完成 8 步配置向导：
 
 当前工作副本在 `my_scripts/` 下还包含一套个人/定制化运行脚本。这类脚本直接调用 Python API，适合在本地复现实验运行，并预先写好配置、分析师选择、交易标的和分析日期。
 
-例如，`my_scripts/roguetrader1.py` 会从项目根目录加载 `.env`，配置 DeepSeek，设置中文输出，只选择链上分析师，并运行 ETH 分析。推荐先在项目根目录完成 editable 安装（`pip install -e .`），确保从 `my_scripts/` 目录运行时也能正确导入 `roguetrader` 包。
+例如，`my_scripts/roguetrader1.py` 会从项目根目录加载 `.env`，配置 DeepSeek，设置中文输出，默认运行市场、社交、新闻、基本面和链上 5 个分析师，并运行 BTC 分析。推荐从项目根目录运行，确保结构化结果统一写入项目根目录的 `my_results/运行结果/`。
 
 #### 运行前准备
 
 ```bash
 conda activate roguetrader
-cd my_scripts
 ```
 
 #### 方式 A：直接运行（输出显示在终端）
 
 ```bash
-python roguetrader1.py
+uv run --frozen python my_scripts/roguetrader1.py
 ```
 
 - 输出会实时显示在终端。
-- 关闭终端后，终端输出不会自动保留。
-- 适合快速测试脚本是否能正常启动。
+- 本次运行会自动创建 `my_results/运行结果/<时间戳>_<标的>/`。
+- 该目录会包含 `运行索引.json`、`报告.md`、`状态.json`、`最终决策.json`、`运行配置.json`、`分段报告/` 和 `终端日志.log`。
+- 这是推荐的完整多智能体运行方式。
 
 ### 本地 processed/parquet 工作流
 
@@ -409,42 +440,36 @@ uv run --frozen python my_scripts/roguetrader_local_data.py \
 
 该命令会在 `my_results/运行结果/<时间戳>_<标的>/` 下生成 `运行索引.json`、`报告.md`、`状态.json`、`最终决策.json` 和 `运行配置.json`。
 
-#### 方式 B：保存完整终端输出到本地文件
+#### 方式 B：额外保存一份 Shell 转录日志
 
 ```bash
-python roguetrader1.py > ../my_results/rogue_eth_0519.log 2>&1
+uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1
 ```
 
-- 终端不会实时显示内容，标准输出和错误信息都会写入 `../my_results/rogue_eth_0519.log`。
+- 终端不会实时显示内容，标准输出和错误信息都会额外写入 `my_results/rogue_btc_0713.log`。
 - `>` 会覆盖同名旧文件；如果想追加写入，使用 `>>`。
-- 适合需要完整留存一次运行日志的场景。
+- 这只是额外的 Shell 转录。标准完整结果仍以 `my_results/运行结果/<时间戳>_<标的>/` 为准。
 
-#### 方式 C：边看终端输出，边保存到本地文件（推荐）
+#### 方式 C：边看终端输出，边额外保存 Shell 转录
 
 ```bash
-python roguetrader1.py 2>&1 | tee ../my_results/rogue_eth_0519.log
-
-
-python roguetrader1.py 2>&1 | tee ../my_results/rogue_eth_0606.log
-
-
-
+uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 - 屏幕上可以实时观察运行进度。
-- 同时会把完整终端输出保存到 `my_results/` 下。
-- 最适合 RogueTrader 这类耗时较长、需要观察中间过程的 LLM 多智能体分析任务。
+- 同时会额外保存一份 Shell 转录到 `my_results/rogue_btc_0713.log`。
+- 通常不需要手动 `tee`，因为标准运行目录内已经自动写入 `终端日志.log`。
 
 如果希望 Python 输出尽量不被缓冲，可以使用 `-u`：
 
 ```bash
-python -u roguetrader1.py 2>&1 | tee ../my_results/rogue_eth_0519.log
+uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 #### 方式 D：后台运行，关闭终端也尽量不中断
 
 ```bash
-nohup python -u roguetrader1.py > ../my_results/rogue_eth_0519.log 2>&1 &
+nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1 &
 ```
 
 查看后台任务：
@@ -457,7 +482,7 @@ ps aux | grep roguetrader1
 实时查看输出文件：
 
 ```bash
-tail -f ../my_results/rogue_eth_0519.log
+tail -f my_results/rogue_btc_0713.log
 ```
 
 停止后台任务时，先通过 `ps aux | grep roguetrader1` 找到进程号，再执行：
@@ -470,11 +495,11 @@ kill 进程号
 
 | 场景 | 命令 |
 |------|------|
-| 快速测试 | `python roguetrader1.py` |
-| 保存完整日志 | `python roguetrader1.py > ../my_results/报告名.log 2>&1` |
-| 边看边保存 | `python -u roguetrader1.py 2>&1 \| tee ../my_results/报告名.log` |
-| 后台运行 | `nohup python -u roguetrader1.py > ../my_results/报告名.log 2>&1 &` |
-| 查看后台输出 | `tail -f ../my_results/报告名.log` |
+| 完整运行 | `uv run --frozen python my_scripts/roguetrader1.py` |
+| 额外保存 Shell 转录 | `uv run --frozen python my_scripts/roguetrader1.py > my_results/报告名.log 2>&1` |
+| 边看边额外保存 | `uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 \| tee my_results/报告名.log` |
+| 后台运行 | `nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/报告名.log 2>&1 &` |
+| 查看后台输出 | `tail -f my_results/报告名.log` |
 | 停止前台脚本 | `Ctrl+C` |
 | 停止后台脚本 | `ps aux \| grep roguetrader1` 后 `kill 进程号` |
 
@@ -486,7 +511,7 @@ kill 进程号
 - `config["output_language"]`：设置输出语言，如 `Chinese` 或 `English`。
 - `config["max_debate_rounds"]`：设置多空研究员辩论轮数。
 - `config["max_recur_limit"]`：设置 LangGraph 递归限制，复杂分析可适当调大。
-- `rt.propagate("ETH-USD", "2026-05-19")`：修改交易标的和分析日期。
+- `rt.propagate("BTC-USD", "2026-07-13")`：修改交易标的和分析日期。
 
 ### Python API
 
@@ -581,8 +606,8 @@ rt.reflect_and_remember(returns_losses=+3.2)  # +3.2% 收益
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `llm_provider` | `deepseek` | LLM 提供商：openai, anthropic, google, xai, openrouter, ollama, deepseek |
-| `deep_think_llm` | `deepseek-reasoner` | 深度思考模型（用于研究经理、投资组合经理） |
-| `quick_think_llm` | `deepseek-chat` | 快速思考模型（用于分析师、研究员、交易员、风控辩手） |
+| `deep_think_llm` | `deepseek-v4-pro` | 深度思考模型（用于研究经理、投资组合经理） |
+| `quick_think_llm` | `deepseek-v4-flash` | 快速思考模型（用于分析师、研究员、交易员、风控辩手） |
 | `backend_url` | `https://api.deepseek.com` | API 端点（留空则按提供商自动设置） |
 | `output_language` | `English` | 报告语言。设为 `Chinese` 则输出中文。内部辩论始终使用英文以保证推理质量 |
 | `max_debate_rounds` | `1` | 多头 vs 空头辩论轮数 |
@@ -698,7 +723,7 @@ START → [按顺序执行选中的分析师]
 这个本地工作副本包含在上游代码库之外的一系列修改：
 
 ### 配置变更
-- **默认 LLM**：从 OpenAI GPT 改为 **DeepSeek**（`deepseek-reasoner` + `deepseek-chat`）
+- **默认 LLM**：从 OpenAI GPT 改为 **DeepSeek**（`deepseek-v4-pro` + `deepseek-v4-flash`）
 - **默认后端 URL**：`https://api.deepseek.com`
 - 在 LLM 工厂中新增 `deepseek` 作为识别的提供商（走 OpenAI 兼容 API 路径）
 
@@ -715,7 +740,7 @@ START → [按顺序执行选中的分析师]
 - **Ticker 映射表**：30+ 加密货币代码 → CoinGecko coin_id 的映射，附搜索 API 回退
 
 ### 个人脚本与结果
-- `my_scripts/roguetrader1.py` —— DeepSeek 配置 + ETH 链上分析演示
+- `my_scripts/roguetrader1.py` —— DeepSeek 配置 + BTC 完整多智能体演示
 - `my_results/` —— 历史分析记录和 JSON 格式的完整状态日志
 
 ---
@@ -739,6 +764,7 @@ typer >= 0.21.0                 # CLI 框架
 questionary >= 2.1.0            # 交互式提示
 redis >= 6.2.0                  # 可选：记忆持久化
 python-dotenv >= 1.0.0          # 环境变量加载
+PyYAML >= 6.0.2                 # Agent YAML 配置
 ```
 
 ---

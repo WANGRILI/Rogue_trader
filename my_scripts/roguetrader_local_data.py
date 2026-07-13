@@ -295,8 +295,8 @@ def main():
         config = DEFAULT_CONFIG.copy()
         config["llm_provider"] = "deepseek"
         config["backend_url"] = "https://api.deepseek.com"
-        config["deep_think_llm"] = "deepseek-reasoner"
-        config["quick_think_llm"] = "deepseek-chat"
+        config["deep_think_llm"] = "deepseek-v4-pro"
+        config["quick_think_llm"] = "deepseek-v4-flash"
         config["output_language"] = args.output_language
         config["max_debate_rounds"] = args.max_debate_rounds
         config["max_recur_limit"] = args.max_recur_limit

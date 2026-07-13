@@ -2,8 +2,10 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from roguetrader.agents.utils.agent_utils import render_agent_prompt
 
-def create_bear_researcher(llm, memory):
+
+def create_bear_researcher(llm, memory, agent_registry=None):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
         history = investment_debate_state.get("history", "")
@@ -23,7 +25,13 @@ def create_bear_researcher(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""You are a Bear Analyst arguing against investing in the asset. Your task is to build a strong, evidence-based case highlighting risks, competitive disadvantages, and negative market indicators. Leverage the provided research and data to address concerns and counter bullish arguments effectively.
+        prompt = render_agent_prompt(
+            agent_registry,
+            "bear_researcher",
+            "You are a Bear Analyst arguing against investing in the asset.",
+            "Build a strong, evidence-based bearish case and counter bullish arguments effectively.",
+            "Engage conversationally and debate directly rather than only listing data.",
+            f"""Your task is to build a strong, evidence-based case highlighting risks, competitive disadvantages, and negative market indicators. Leverage the provided research and data to address concerns and counter bullish arguments effectively.
 
 Key points to focus on:
 - Risk Factors: Highlight potential threats, market volatility, regulatory challenges, and downside risks.
@@ -42,7 +50,8 @@ Conversation history of the debate: {history}
 Last bull argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}
 Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the strengths of the bear position. You must also address reflections and learn from lessons and mistakes you made in the past.
-"""
+""",
+        )
 
         response = llm.invoke(prompt)
 

@@ -1,9 +1,11 @@
 import os
+import sys
+import traceback
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Dict, Any, List, Optional
 
 from langgraph.prebuilt import ToolNode
-
-from roguetrader.llm_clients import create_llm_client
+from langchain_core.messages import HumanMessage
 
 from roguetrader.agents import *
 from roguetrader.default_config import DEFAULT_CONFIG
@@ -46,6 +48,30 @@ from .reflection import Reflector
 from .signal_processing import SignalProcessor
 from roguetrader.output_paths import make_run_output_paths
 from roguetrader.run_outputs import state_snapshot, write_run_outputs
+from roguetrader.llm_clients.agent_registry import AgentLLMRegistry
+
+
+class _TeeStream:
+    """Write terminal output to both the original stream and a log file."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+        return len(data)
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
+    def isatty(self):
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self.streams)
+
+    def __getattr__(self, name):
+        return getattr(self.streams[0], name)
 
 
 class RogueTraderGraph:
@@ -88,21 +114,9 @@ class RogueTraderGraph:
         if self.callbacks:
             llm_kwargs["callbacks"] = self.callbacks
 
-        deep_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["deep_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
-        )
-        quick_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["quick_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
-        )
-
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
+        self.agent_registry = AgentLLMRegistry(self.config, llm_kwargs)
+        self.deep_thinking_llm = self.agent_registry.get_llm("_default_deep", "deep")
+        self.quick_thinking_llm = self.agent_registry.get_llm("_default_quick", "quick")
 
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
@@ -129,11 +143,18 @@ class RogueTraderGraph:
             self.invest_judge_memory,
             self.portfolio_manager_memory,
             self.conditional_logic,
+            self.agent_registry,
         )
 
         self.propagator = Propagator(max_recur_limit=self.config["max_recur_limit"])
-        self.reflector = Reflector(self.quick_thinking_llm)
-        self.signal_processor = SignalProcessor(self.quick_thinking_llm)
+        self.reflector = Reflector(
+            self.agent_registry.get_llm("reflector", "quick"),
+            self.agent_registry,
+        )
+        self.signal_processor = SignalProcessor(
+            self.agent_registry.get_llm("signal_processor", "quick"),
+            self.agent_registry,
+        )
 
         # State tracking
         self.curr_state = None
@@ -220,35 +241,63 @@ class RogueTraderGraph:
             self.config.get("results_dir", "my_results"),
             company_name,
         )
+        self.current_output_paths.root.mkdir(parents=True, exist_ok=True)
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
             company_name, trade_date
         )
         args = self.propagator.get_graph_args()
+        final_state = None
+        decision = None
 
-        if self.debug:
-            # Debug mode with tracing
-            trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
+        with self.current_output_paths.log_path.open("a", encoding="utf-8") as log_file:
+            stdout = _TeeStream(sys.stdout, log_file)
+            stderr = _TeeStream(sys.stderr, log_file)
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                try:
+                    if self.debug:
+                        # Debug mode with tracing
+                        trace = []
+                        for chunk in self.graph.stream(init_agent_state, **args):
+                            final_state = chunk
+                            if len(chunk["messages"]) == 0:
+                                pass
+                            else:
+                                last_message = chunk["messages"][-1]
+                                is_internal_continue = (
+                                    isinstance(last_message, HumanMessage)
+                                    and last_message.content == "Continue"
+                                )
+                                if not is_internal_continue:
+                                    last_message.pretty_print()
+                                trace.append(chunk)
 
-            final_state = trace[-1]
-        else:
-            # Standard mode without tracing
-            final_state = self.graph.invoke(init_agent_state, **args)
+                        final_state = trace[-1] if trace else final_state
+                    else:
+                        # Standard mode without tracing
+                        final_state = self.graph.invoke(init_agent_state, **args)
 
-        # Store current state for reflection
-        self.curr_state = final_state
+                    # Store current state for reflection
+                    self.curr_state = final_state
 
-        decision = self.process_signal(final_state["final_trade_decision"])
+                    decision = self.process_signal(final_state["final_trade_decision"])
+                    print(f"\nRogueTrader final decision: {decision}")
 
-        # Log state and normalized run outputs
-        self._log_state(trade_date, final_state, decision)
+                    # Log state and normalized run outputs
+                    self._log_state(trade_date, final_state, decision)
+                except Exception:
+                    traceback.print_exc()
+                    if final_state is not None:
+                        self._log_state(trade_date, final_state, "INCOMPLETE")
+                        print(f"Partial outputs written to: {self.current_output_paths.root}")
+                    raise
+                except KeyboardInterrupt:
+                    print("\nRogueTrader run interrupted by user.")
+                    if final_state is not None:
+                        self._log_state(trade_date, final_state, "INCOMPLETE")
+                        print(f"Partial outputs written to: {self.current_output_paths.root}")
+                    raise
 
         return final_state, decision
 

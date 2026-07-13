@@ -27,9 +27,10 @@ DEFAULT_CONFIG = {
     # ==================== LLM配置 ====================
     # 从环境变量读取，支持自定义覆盖
     "llm_provider": os.getenv("ROGUETRADER_LLM_PROVIDER", "deepseek"),  # LLM提供商
-    "deep_think_llm": os.getenv("ROGUETRADER_DEEP_THINK_LLM", "deepseek-reasoner"),  # 深度思考模型
-    "quick_think_llm": os.getenv("ROGUETRADER_QUICK_THINK_LLM", "deepseek-chat"),  # 快速思考模型
+    "deep_think_llm": os.getenv("ROGUETRADER_DEEP_THINK_LLM", "deepseek-v4-pro"),  # 深度思考模型
+    "quick_think_llm": os.getenv("ROGUETRADER_QUICK_THINK_LLM", "deepseek-v4-flash"),  # 快速思考模型
     "backend_url": os.getenv("ROGUETRADER_BACKEND_URL", "https://api.deepseek.com"),  # API端点
+    "agent_config_path": os.getenv("ROGUETRADER_AGENT_CONFIG"),  # Agent身份/模型配置YAML
 
     # ==================== 提供商特定思考配置 ====================
     # Google Gemini

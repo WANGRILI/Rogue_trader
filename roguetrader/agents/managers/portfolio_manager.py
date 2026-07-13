@@ -1,7 +1,11 @@
-from roguetrader.agents.utils.agent_utils import build_instrument_context, get_language_instruction
+from roguetrader.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+    render_agent_prompt,
+)
 
 
-def create_portfolio_manager(llm, memory):
+def create_portfolio_manager(llm, memory, agent_registry=None):
     def portfolio_manager_node(state) -> dict:
 
         instrument_context = build_instrument_context(state["company_of_interest"])
@@ -22,7 +26,13 @@ def create_portfolio_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
+        prompt = render_agent_prompt(
+            agent_registry,
+            "portfolio_manager",
+            "You are the Portfolio Manager responsible for the final trading decision.",
+            "Synthesize the risk analysts' debate into one final Buy / Overweight / Hold / Underweight / Sell rating.",
+            "Be decisive, risk-aware, and actionable.",
+            f"""Synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
 
@@ -51,7 +61,8 @@ def create_portfolio_manager(llm, memory):
 
 ---
 
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}""",
+        )
 
         response = llm.invoke(prompt)
 

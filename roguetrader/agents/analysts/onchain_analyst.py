@@ -25,6 +25,7 @@ from roguetrader.agents.utils.agent_utils import (
     get_funding_rate,
     get_cme_gap,
     get_local_crypto_ohlcv,
+    render_agent_prompt,
 )
 
 
@@ -35,7 +36,7 @@ from roguetrader.agents.utils.agent_utils import (
 # 
 # 返回:
 #     onchain_analyst_node: 链上分析师节点函数,接受状态字典并返回分析结果
-def create_onchain_analyst(llm):
+def create_onchain_analyst(llm, agent_registry=None):
     def onchain_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
@@ -55,9 +56,13 @@ def create_onchain_analyst(llm):
         ]
 
         system_message = (
-            """# On-Chain Crypto & Macro Power Structure Analysis
-
-You are RogueTrader's Lead On-Chain Analyst specializing in crypto assets. Go beyond surface metrics - analyze not just price, but **the power structure and博弈 dynamics** that drive price.
+            render_agent_prompt(
+                agent_registry,
+                "onchain_analyst",
+                "You are RogueTrader's Lead On-Chain Analyst specializing in crypto assets.",
+                "Go beyond surface metrics and analyze price, power structure, whale behavior, liquidity, derivatives, and macro game dynamics.",
+                "Use practical trading language, cite concrete metrics, and be explicit about manipulation risk.",
+                """# On-Chain Crypto & Macro Power Structure Analysis
 
 ## IMPORTANT INSTRUCTIONS:
 1. **Use tools strategically**: Call 2-4 key tools to gather essential data, then STOP and analyze.
@@ -106,7 +111,8 @@ After gathering all data, write a comprehensive analysis that includes:
    - Specific actionable trading conclusions that account for manipulation risk
    - Summary table of key metrics
    - **FINAL DECISION: **BUY/OVERWEIGHT/HOLD/UNDERWEIGHT/SELL**
-"""
+""",
+            )
             + get_language_instruction()
         )
 

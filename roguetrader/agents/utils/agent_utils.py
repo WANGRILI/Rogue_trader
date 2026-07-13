@@ -75,6 +75,31 @@ def build_instrument_context(ticker: str) -> str:
     )
 
 
+def render_agent_prompt(
+    agent_registry,
+    agent_id: str,
+    default_identity: str,
+    default_focus: str,
+    default_style: str,
+    body: str,
+) -> str:
+    """Render a prompt with optional YAML-configured agent profile overrides."""
+    if agent_registry is None:
+        return (
+            f"# Agent Identity\n{default_identity.strip()}\n\n"
+            f"# Focus\n{default_focus.strip()}\n\n"
+            f"# Response Style\n{default_style.strip()}\n\n"
+            f"{body.strip()}"
+        )
+    return agent_registry.render_prompt(
+        agent_id=agent_id,
+        default_identity=default_identity,
+        default_focus=default_focus,
+        default_style=default_style,
+        body=body,
+    )
+
+
 # 创建消息删除函数工厂 - 返回一个清除消息并添加占位符的函数
 def create_msg_delete():
     def delete_messages(state):

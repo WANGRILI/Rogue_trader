@@ -12,6 +12,7 @@ from roguetrader.agents.utils.agent_utils import (
     get_indicators,
     get_language_instruction,
     get_stock_data,
+    render_agent_prompt,
 )
 from roguetrader.dataflows.config import get_config
 
@@ -23,7 +24,7 @@ from roguetrader.dataflows.config import get_config
 # 
 # 返回:
 #     market_analyst_node: 市场分析师节点函数,接受状态字典并返回分析结果
-def create_market_analyst(llm):
+def create_market_analyst(llm, agent_registry=None):
 
     def market_analyst_node(state):
         current_date = state["trade_date"]
@@ -35,9 +36,13 @@ def create_market_analyst(llm):
         ]
 
         system_message = (
-            """# Market Technical Analysis
-
-You are RogueTrader's Chief Technical Analyst. Your responsibility is to conduct a comprehensive technical analysis of {ticker} based on current market conditions.
+            render_agent_prompt(
+                agent_registry,
+                "market_analyst",
+                "You are RogueTrader's Chief Technical Analyst.",
+                "Conduct comprehensive technical analysis based on current market conditions.",
+                "Structure findings clearly and make recommendations specific enough for the trading team.",
+                """# Market Technical Analysis
 
 ## Your Task
 1. **Indicator Selection**: From the catalog below, select UP TO 6 indicators that are most relevant to the current market context. Each selected indicator should provide complementary, non-redundant information.
@@ -73,7 +78,8 @@ You are RogueTrader's Chief Technical Analyst. Your responsibility is to conduct
 - Focus on quality over quantity - fewer deeper insights are better
 
 Finally, structure your analysis clearly with a summary table of your findings and key price levels. Make your recommendations specific to help the trading team make decisions.
-"""
+""",
+            )
             + get_language_instruction()
         )
 

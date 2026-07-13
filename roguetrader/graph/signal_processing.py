@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 import re
 
+from roguetrader.agents.utils.agent_utils import render_agent_prompt
+
 
 DECISION_WORD_PATTERN = re.compile(
     r"\b(UNDERWEIGHT|OVERWEIGHT|SELL|BUY|HOLD)\b",
@@ -16,9 +18,10 @@ LABELED_DECISION_PATTERN = re.compile(
 class SignalProcessor:
     """Processes trading signals to extract actionable decisions."""
 
-    def __init__(self, quick_thinking_llm: ChatOpenAI):
+    def __init__(self, quick_thinking_llm: ChatOpenAI, agent_registry=None):
         """Initialize with an LLM for processing."""
         self.quick_thinking_llm = quick_thinking_llm
+        self.agent_registry = agent_registry
 
     def process_signal(self, full_signal: str) -> str:
         """
@@ -44,9 +47,14 @@ class SignalProcessor:
         messages = [
             (
                 "system",
-                "You are an efficient assistant that extracts the trading decision from analyst reports. "
-                "Extract the rating as exactly one of: BUY, OVERWEIGHT, HOLD, UNDERWEIGHT, SELL. "
-                "Output only the single rating word, nothing else.",
+                render_agent_prompt(
+                    self.agent_registry,
+                    "signal_processor",
+                    "You are an efficient assistant that extracts trading decisions from analyst reports.",
+                    "Extract the rating as exactly one of: BUY, OVERWEIGHT, HOLD, UNDERWEIGHT, SELL.",
+                    "Output only the single rating word, nothing else.",
+                    "Extract the rating as exactly one of: BUY, OVERWEIGHT, HOLD, UNDERWEIGHT, SELL. Output only the single rating word, nothing else.",
+                ),
             ),
             ("human", full_signal),
         ]

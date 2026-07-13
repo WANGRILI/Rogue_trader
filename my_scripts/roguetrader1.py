@@ -11,9 +11,8 @@ RogueTrader演示脚本 - 简单入口示例
 4. 创建RogueTraderGraph实例
 5. 调用propagate方法执行分析并获取交易决策
 
-cd my_scripts
 conda activate roguetrader
-python roguetrader1.py
+uv run --frozen python my_scripts/roguetrader1.py
 
 
 """
@@ -35,7 +34,9 @@ python roguetrader1.py
 # 此脚本使用DeepSeek API进行金融分析
 from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 from roguetrader.graph.trading_graph import RogueTraderGraph
 from roguetrader.default_config import DEFAULT_CONFIG
@@ -44,16 +45,17 @@ from roguetrader.default_config import DEFAULT_CONFIG
 config = DEFAULT_CONFIG.copy()
 config["llm_provider"] = "deepseek"  # 指定使用DeepSeek作为LLM提供商
 config["backend_url"] = "https://api.deepseek.com"  # DeepSeek API地址
-config["deep_think_llm"] = "deepseek-reasoner"  # 深度思考模型（用于复杂推理）
-config["quick_think_llm"] = "deepseek-chat"  # 快速思考模型（用于简单任务）
+config["deep_think_llm"] = "deepseek-v4-pro"  # 深度思考模型（用于复杂推理）
+config["quick_think_llm"] = "deepseek-v4-flash"  # 快速思考模型（用于简单任务）
+config["results_dir"] = str(PROJECT_ROOT / "my_results")  # 固定写入项目根目录的统一结果目录
 config["output_language"] = "Chinese"  # 设置输出语言为中文
 config["max_debate_rounds"] = 2  # 设置辩论轮数
 config["max_recur_limit"] = 50  # 增加递归限制以支持更长的分析流程
 
-# 选择分析师 - 此处只使用onchain分析师进行测试
-# 可选分析师: market(市场), social(社交), news(新闻), 
+# 选择分析师 - 默认运行完整多智能体分析链路
+# 可选分析师: market(市场), social(社交), news(新闻),
 #            fundamentals(基本面), onchain(链上/加密货币)
-selected_analysts = ["onchain"]  # 只测试onchain分析师
+selected_analysts = ["market", "social", "news", "fundamentals", "onchain"]
 
 # 创建RogueTrader图实例
 # debug=True: 启用调试模式
@@ -65,8 +67,10 @@ rt = RogueTraderGraph(debug=True, config=config, selected_analysts=selected_anal
 # 参数1: ticker - 要分析的金融工具代码
 # 参数2: analysis_date - 分析日期
 # 返回: (最终状态, 交易决策)
-_, decision = rt.propagate("ETH-USD", "2026-06-06")  # 分析以太坊
+_, decision = rt.propagate("BTC-USD", "2026-07-13")  # 分析比特币
 # _, decision = rt.propagate("GC=F", "2026-04-04")   # 分析黄金期货
 
 # 打印最终交易决策
 print(decision)
+if rt.current_output_paths:
+    print(f"本次运行结果目录: {rt.current_output_paths.root}")

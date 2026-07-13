@@ -129,7 +129,7 @@ RogueTrader supports **7 LLM providers** through a unified factory pattern:
 
 | Provider | Models (Quick) | Models (Deep) | API Base |
 |----------|---------------|---------------|----------|
-| **DeepSeek** ★ (default) | `deepseek-chat` | `deepseek-reasoner` | `api.deepseek.com` |
+| **DeepSeek** ★ (default) | `deepseek-v4-flash` | `deepseek-v4-pro` | `api.deepseek.com` |
 | **OpenAI** | GPT-5.4 Mini/Nano, GPT-4.1 | GPT-5.4, GPT-5.2, GPT-5.4 Pro | `api.openai.com` |
 | **Anthropic** | Claude Sonnet 4.6, Haiku 4.5 | Claude Opus 4.6, Sonnet 4.6 | `api.anthropic.com` |
 | **Google** | Gemini 3 Flash, 2.5 Flash | Gemini 3.1 Pro, 2.5 Pro | Google AI |
@@ -137,21 +137,48 @@ RogueTrader supports **7 LLM providers** through a unified factory pattern:
 | **OpenRouter** | NVIDIA Nemotron, GLM 4.5 | Same (free tier) | `openrouter.ai` |
 | **Ollama** | Qwen3, GPT-OSS, GLM-4.7 | Same (local) | `localhost:11434` |
 
-> **Why DeepSeek is default:** It offers an OpenAI-compatible API at significantly lower cost, with strong reasoning capability from `deepseek-reasoner`. All DeepSeek calls go through the standard Chat Completions API (no Responses API dependency).
+> **Why DeepSeek is default:** It offers an OpenAI-compatible API at significantly lower cost, with `deepseek-v4-pro` for deeper reasoning and `deepseek-v4-flash` for faster routine agent work.
 
 ### Model Architecture
 
 ```
-Deep Thinking LLM (deepseek-reasoner)
+Deep Thinking LLM (deepseek-v4-pro)
   ├── Research Manager (investment debate judge)
   └── Portfolio Manager (risk debate judge + final decision)
 
-Quick Thinking LLM (deepseek-chat)
+Quick Thinking LLM (deepseek-v4-flash)
   ├── All 5 Analysts (market, social, news, fundamentals, onchain)
   ├── Bull/Bear Researchers
   ├── Trader
   └── Risk Management Trio (aggressive, conservative, neutral)
 ```
+
+### Agent Configuration
+
+RogueTrader also supports a beginner-friendly agent configuration file:
+
+```bash
+configs/agents.yaml
+```
+
+Use it to adjust each agent's LLM route and persona without editing Python code:
+
+```yaml
+agents:
+  onchain_analyst:
+    llm:
+      tier: quick
+      model: deepseek-v4-flash
+    prompt:
+      identity: |
+        You are RogueTrader's Lead On-Chain Analyst specializing in crypto assets.
+      focus: |
+        Focus on whale behavior, DeFi liquidity, stablecoin flows, derivatives positioning, and manipulation risk.
+      style: |
+        Explain conclusions in practical trading language, not only raw metrics.
+```
+
+You do not need to configure every agent. Missing fields automatically fall back to the built-in defaults. For A/B testing, set `ROGUETRADER_AGENT_CONFIG=/path/to/agents.yaml` to load a different file.
 
 ---
 
@@ -240,7 +267,11 @@ RogueTrader/
 │       ├── anthropic_client.py       # Anthropic Claude
 │       ├── google_client.py          # Google Gemini
 │       ├── model_catalog.py          # Centralized model registry (6 providers × 2 modes)
+│       ├── agent_registry.py         # Per-agent LLM routing and prompt profiles
 │       └── validators.py             # Model validation logic
+│
+├── configs/
+│   └── agents.yaml                   # Optional per-agent persona and model routing
 │
 ├── cli/                              # Interactive terminal UI
 │   ├── main.py                       # Rich/Typer-based TUI (8-step wizard)
@@ -252,7 +283,7 @@ RogueTrader/
 │   └── static/welcome.txt            # ASCII art splash screen
 │
 ├── my_scripts/                       # ★ Personal run scripts
-│   └── roguetrader1.py              # DeepSeek config + ETH on-chain analysis demo
+│   └── roguetrader1.py              # DeepSeek config + full BTC multi-agent demo
 │
 ├── my_results/                       # ★ Personal run outputs
 │   ├── 运行结果/
@@ -334,7 +365,7 @@ uv run --frozen roguetrader --help
 uv run --frozen roguetrader analyze --help
 ```
 
-The current baseline is **19 passing tests**. These tests cover provider/model validation, CLI behavior, output path normalization, on-chain analyst wiring, graph initialization, OpenAI-compatible client configuration, local Parquet data cutoffs, ticker handling, quick-start configuration, and deterministic signal extraction.
+The current baseline is **24 passing tests**. These tests cover provider/model validation, agent registry configuration, CLI behavior, output path normalization, on-chain analyst wiring, graph initialization, OpenAI-compatible client configuration, local Parquet data cutoffs, ticker handling, quick-start configuration, and deterministic signal extraction.
 
 ---
 
@@ -363,24 +394,24 @@ The CLI walks you through an 8-step wizard:
 
 This working copy also includes personal/custom run scripts under `my_scripts/`. These scripts call the Python API directly and are useful for reproducible local runs with pre-filled configuration, analyst selection, ticker, and analysis date.
 
-For example, `my_scripts/roguetrader1.py` loads `.env` from the project root, configures DeepSeek, sets Chinese output, selects the on-chain analyst, and runs an ETH analysis. Before running scripts from `my_scripts/`, install the project in editable mode (`pip install -e .`) so the `roguetrader` package imports correctly.
+For example, `my_scripts/roguetrader1.py` loads `.env` from the project root, configures DeepSeek, sets Chinese output, runs all five analysts by default (market, social, news, fundamentals, and on-chain), and analyzes BTC. Run it from the project root so structured outputs are written consistently under `my_results/运行结果/`.
 
 #### Preparation
 
 ```bash
 conda activate roguetrader
-cd my_scripts
 ```
 
 #### Mode A: Run directly and print to terminal
 
 ```bash
-python roguetrader1.py
+uv run --frozen python my_scripts/roguetrader1.py
 ```
 
 - Output is printed directly to the terminal.
-- Terminal output is not automatically preserved after the terminal is closed.
-- Best for quick smoke tests.
+- Each run automatically creates `my_results/运行结果/<timestamp>_<ticker>/`.
+- That directory contains `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`, `运行配置.json`, `分段报告/`, and `终端日志.log`.
+- This is the recommended full multi-agent run mode.
 
 ### Local Processed Parquet Workflow
 
@@ -404,36 +435,36 @@ uv run --frozen python my_scripts/roguetrader_local_data.py \
 
 This writes `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`, and `运行配置.json` under `my_results/运行结果/<timestamp>_<ticker>/`.
 
-#### Mode B: Save the full terminal output to a local file
+#### Mode B: Save an extra shell transcript
 
 ```bash
-python roguetrader1.py > ../my_results/rogue_eth_0519.log 2>&1
+uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1
 ```
 
-- Nothing is printed live in the terminal; stdout and stderr are both written to `../my_results/rogue_eth_0519.log`.
+- Nothing is printed live in the terminal; stdout and stderr are both additionally written to `my_results/rogue_btc_0713.log`.
 - `>` overwrites an existing file with the same name; use `>>` to append instead.
-- Best when you need a complete local log for one run.
+- This is only an extra shell transcript. The standard complete output remains `my_results/运行结果/<timestamp>_<ticker>/`.
 
-#### Mode C: Print live and save at the same time (recommended)
+#### Mode C: Print live and save an extra shell transcript
 
 ```bash
-python roguetrader1.py 2>&1 | tee ../my_results/rogue_eth_0519.log
+uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 - You can watch progress in the terminal in real time.
-- The full terminal output is also saved under `my_results/`.
-- Best for long-running RogueTrader multi-agent analysis jobs.
+- An extra shell transcript is also saved to `my_results/rogue_btc_0713.log`.
+- Manual `tee` is usually unnecessary because the standard run directory already writes `终端日志.log`.
 
 To reduce Python output buffering, use `-u`:
 
 ```bash
-python -u roguetrader1.py 2>&1 | tee ../my_results/rogue_eth_0519.log
+uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 #### Mode D: Run in the background
 
 ```bash
-nohup python -u roguetrader1.py > ../my_results/rogue_eth_0519.log 2>&1 &
+nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1 &
 ```
 
 Check background jobs:
@@ -446,7 +477,7 @@ ps aux | grep roguetrader1
 Follow the output file:
 
 ```bash
-tail -f ../my_results/rogue_eth_0519.log
+tail -f my_results/rogue_btc_0713.log
 ```
 
 To stop a background run, find the process ID with `ps aux | grep roguetrader1`, then run:
@@ -459,11 +490,11 @@ kill <pid>
 
 | Scenario | Command |
 |----------|---------|
-| Quick test | `python roguetrader1.py` |
-| Save full log | `python roguetrader1.py > ../my_results/report_name.log 2>&1` |
-| Print and save | `python -u roguetrader1.py 2>&1 \| tee ../my_results/report_name.log` |
-| Background run | `nohup python -u roguetrader1.py > ../my_results/report_name.log 2>&1 &` |
-| Follow background output | `tail -f ../my_results/report_name.log` |
+| Full run | `uv run --frozen python my_scripts/roguetrader1.py` |
+| Extra shell transcript | `uv run --frozen python my_scripts/roguetrader1.py > my_results/report_name.log 2>&1` |
+| Print and save extra transcript | `uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 \| tee my_results/report_name.log` |
+| Background run | `nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/report_name.log 2>&1 &` |
+| Follow background output | `tail -f my_results/report_name.log` |
 | Stop foreground run | `Ctrl+C` |
 | Stop background run | `ps aux \| grep roguetrader1`, then `kill <pid>` |
 
@@ -475,7 +506,7 @@ To customize a run, edit `my_scripts/roguetrader1.py` and adjust:
 - `config["output_language"]`: choose `Chinese` or `English` report output.
 - `config["max_debate_rounds"]`: set the Bull/Bear researcher debate rounds.
 - `config["max_recur_limit"]`: set the LangGraph recursion limit; increase for more complex runs.
-- `rt.propagate("ETH-USD", "2026-05-19")`: change the ticker and analysis date.
+- `rt.propagate("BTC-USD", "2026-07-13")`: change the ticker and analysis date.
 
 ### Python API
 
@@ -570,8 +601,8 @@ All configuration lives in `roguetrader/default_config.py`:
 | Config Key | Default | Description |
 |------------|---------|-------------|
 | `llm_provider` | `deepseek` | LLM provider: openai, anthropic, google, xai, openrouter, ollama, deepseek |
-| `deep_think_llm` | `deepseek-reasoner` | Model for complex reasoning (Research Manager, Portfolio Manager) |
-| `quick_think_llm` | `deepseek-chat` | Model for routine tasks (analysts, researchers, trader, risk debators) |
+| `deep_think_llm` | `deepseek-v4-pro` | Model for complex reasoning (Research Manager, Portfolio Manager) |
+| `quick_think_llm` | `deepseek-v4-flash` | Model for routine tasks (analysts, researchers, trader, risk debators) |
 | `backend_url` | `https://api.deepseek.com` | API endpoint (auto-set per provider if blank) |
 | `output_language` | `English` | Report language. Use `Chinese` for Chinese output. Internal debates always English |
 | `max_debate_rounds` | `1` | Bull vs Bear debate rounds |
@@ -687,7 +718,7 @@ User ticker + date
 This local working copy includes modifications beyond the upstream codebase:
 
 ### Configuration Changes
-- **Default LLM**: Changed from OpenAI GPT to **DeepSeek** (`deepseek-reasoner` + `deepseek-chat`)
+- **Default LLM**: Changed from OpenAI GPT to **DeepSeek** (`deepseek-v4-pro` + `deepseek-v4-flash`)
 - **Default backend URL**: `https://api.deepseek.com`
 - Added `deepseek` as a recognized provider in the LLM factory (uses OpenAI-compatible API path)
 
@@ -704,7 +735,7 @@ This local working copy includes modifications beyond the upstream codebase:
 - **Ticker mapping**: 30+ crypto ticker → CoinGecko coin_id mappings with search API fallback
 
 ### Personal Scripts & Results
-- `my_scripts/roguetrader1.py` — DeepSeek config + ETH on-chain analysis demo
+- `my_scripts/roguetrader1.py` — DeepSeek config + full BTC multi-agent demo
 - `my_results/` — Historical analysis traces and full state logs in JSON
 
 ---
@@ -728,6 +759,7 @@ typer >= 0.21.0             # CLI framework
 questionary >= 2.1.0        # Interactive prompts
 redis >= 6.2.0              # Optional: memory persistence
 python-dotenv >= 1.0.0      # Environment variable loading
+PyYAML >= 6.0.2             # Agent YAML configuration
 ```
 
 ---

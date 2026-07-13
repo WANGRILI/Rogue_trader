@@ -1,19 +1,27 @@
 from typing import Dict, Any
 from langchain_openai import ChatOpenAI
 
+from roguetrader.agents.utils.agent_utils import render_agent_prompt
+
 
 class Reflector:
     """Handles reflection on decisions and updating memory."""
 
-    def __init__(self, quick_thinking_llm: ChatOpenAI):
+    def __init__(self, quick_thinking_llm: ChatOpenAI, agent_registry=None):
         """Initialize the reflector with an LLM."""
         self.quick_thinking_llm = quick_thinking_llm
+        self.agent_registry = agent_registry
         self.reflection_system_prompt = self._get_reflection_prompt()
 
     def _get_reflection_prompt(self) -> str:
         """Get the system prompt for reflection."""
-        return """
-You are an expert financial analyst tasked with reviewing trading decisions/analysis and providing a comprehensive, step-by-step analysis. 
+        return render_agent_prompt(
+            self.agent_registry,
+            "reflector",
+            "You are an expert financial analyst tasked with reviewing trading decisions and analysis.",
+            "Deliver detailed insights into investment decisions and highlight opportunities for improvement.",
+            "Be detailed, accurate, actionable, and focused on lessons that can be reused.",
+            """
 Your goal is to deliver detailed insights into investment decisions and highlight opportunities for improvement, adhering strictly to the following guidelines:
 
 1. Reasoning:
@@ -43,7 +51,8 @@ Your goal is to deliver detailed insights into investment decisions and highligh
    - Ensure the condensed sentence captures the essence of the lessons and reasoning for easy reference.
 
 Adhere strictly to these instructions, and ensure your output is detailed, accurate, and actionable. You will also be given objective descriptions of the market from a price movements, technical indicator, news, and sentiment perspective to provide more context for your analysis.
-"""
+""",
+        )
 
     def _extract_current_situation(self, current_state: Dict[str, Any]) -> str:
         """Extract the current market situation from the state."""

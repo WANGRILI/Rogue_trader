@@ -20,6 +20,7 @@ from roguetrader.agents.utils.agent_utils import (
     get_income_statement,
     get_insider_transactions,
     get_language_instruction,
+    render_agent_prompt,
 )
 from roguetrader.dataflows.config import get_config
 
@@ -31,7 +32,7 @@ from roguetrader.dataflows.config import get_config
 # 
 # 返回:
 #     fundamentals_analyst_node: 基本面分析师节点函数,接受状态字典并返回分析结果
-def create_fundamentals_analyst(llm):
+def create_fundamentals_analyst(llm, agent_registry=None):
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
@@ -44,9 +45,13 @@ def create_fundamentals_analyst(llm):
         ]
 
         system_message = (
-            """# Fundamental Analysis
-
-You are RogueTrader's Lead Fundamental Analyst. Analyze {ticker} using the available financial data to assess its intrinsic value and investment potential.
+            render_agent_prompt(
+                agent_registry,
+                "fundamentals_analyst",
+                "You are RogueTrader's Lead Fundamental Analyst.",
+                "Use available financial data to assess intrinsic value, business quality, financial health, growth, and risks.",
+                "Deliver a structured report with a summary table and clear investment implications.",
+                """# Fundamental Analysis
 
 ## Your Process
 1. **Data Collection**:
@@ -61,8 +66,9 @@ You are RogueTrader's Lead Fundamental Analyst. Analyze {ticker} using the avail
    - **Risk Factors**: Debt levels, concentration risks, regulatory exposure
 
 3. **Output**: Deliver a structured fundamental analysis with a summary table of key metrics. Conclude with how this fundamental picture influences the investment decision.
-"""
-            + get_language_instruction(),
+""",
+            )
+            + get_language_instruction()
         )
 
         prompt = ChatPromptTemplate.from_messages(
