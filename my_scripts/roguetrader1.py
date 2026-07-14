@@ -32,6 +32,7 @@ uv run --frozen python my_scripts/roguetrader1.py
 
 # 完整版演示 - 自定义配置
 # 此脚本使用DeepSeek API进行金融分析
+import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -67,7 +68,7 @@ rt = RogueTraderGraph(debug=True, config=config, selected_analysts=selected_anal
 # 参数1: ticker - 要分析的金融工具代码
 # 参数2: analysis_date - 分析日期
 # 返回: (最终状态, 交易决策)
-_, decision = rt.propagate("BTC-USD", "2026-07-13")  # 分析比特币
+_, decision = rt.propagate("BTC-USD", datetime.date.today().isoformat())  # 分析比特币（使用当日日期）
 # _, decision = rt.propagate("GC=F", "2026-04-04")   # 分析黄金期货
 
 # 打印最终交易决策

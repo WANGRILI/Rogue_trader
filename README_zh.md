@@ -288,7 +288,8 @@ RogueTrader/
 │   └── static/welcome.txt            # ASCII 艺术欢迎画面
 │
 ├── my_scripts/                       # ★ 个人运行脚本
-│   └── roguetrader1.py              # DeepSeek 配置 + BTC 完整多智能体示例
+│   ├── roguetrader0.py              # 手动运行入口：支持命令行参数
+│   └── roguetrader1.py              # Hermes/定时任务入口：默认跑当日 BTC
 │
 ├── my_results/                       # ★ 个人运行输出
 │   ├── 运行结果/
@@ -370,7 +371,7 @@ uv run --frozen roguetrader --help
 uv run --frozen roguetrader analyze --help
 ```
 
-当前基线是 **24 个测试通过**。测试覆盖范围包括：模型/Provider 校验、Agent 注册配置、CLI 行为、输出路径规范化、链上分析师接线、Graph 初始化、OpenAI-compatible 客户端配置、本地 Parquet 数据按分析日期截断、ticker 处理、快速入口配置，以及最终交易信号的确定性提取。
+当前基线是 **25 个测试通过**。测试覆盖范围包括：模型/Provider 校验、Agent 注册配置、CLI 行为、输出路径规范化、链上分析师接线、Graph 初始化、OpenAI-compatible 客户端配置、本地 Parquet 数据按分析日期截断、ticker 处理、快速入口配置，以及最终交易信号的确定性提取。
 
 ---
 
@@ -397,9 +398,14 @@ CLI 将引导你完成 8 步配置向导：
 
 ### 自定义脚本与高级运行方式
 
-当前工作副本在 `my_scripts/` 下还包含一套个人/定制化运行脚本。这类脚本直接调用 Python API，适合在本地复现实验运行，并预先写好配置、分析师选择、交易标的和分析日期。
+当前工作副本在 `my_scripts/` 下还包含一套个人/定制化运行脚本。这类脚本直接调用 Python API，适合在本地复现实验运行，或者交给定时任务每天自动执行。
 
-例如，`my_scripts/roguetrader1.py` 会从项目根目录加载 `.env`，配置 DeepSeek，设置中文输出，默认运行市场、社交、新闻、基本面和链上 5 个分析师，并运行 BTC 分析。推荐从项目根目录运行，确保结构化结果统一写入项目根目录的 `my_results/运行结果/`。
+推荐区分两个入口：
+
+- `my_scripts/roguetrader0.py`：手动运行入口，支持通过命令行修改标的、日期、分析师、模型和辩论轮数。
+- `my_scripts/roguetrader1.py`：Hermes/定时任务入口，保留为每日自动运行脚本，默认分析当日 `BTC-USD`。
+
+两个入口都会从项目根目录加载 `.env`，配置 DeepSeek，默认写入项目根目录的 `my_results/运行结果/`。
 
 #### 运行前准备
 
@@ -410,13 +416,24 @@ conda activate roguetrader
 #### 方式 A：直接运行（输出显示在终端）
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py
+uv run --frozen python my_scripts/roguetrader0.py
 ```
 
 - 输出会实时显示在终端。
 - 本次运行会自动创建 `my_results/运行结果/<时间戳>_<标的>/`。
 - 该目录会包含 `运行索引.json`、`报告.md`、`状态.json`、`最终决策.json`、`运行配置.json`、`分段报告/` 和 `终端日志.log`。
-- 这是推荐的完整多智能体运行方式。
+- 这是推荐的手动完整多智能体运行方式。
+- 如需指定历史日期，可运行：
+
+```bash
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13
+```
+
+Hermes 或 crontab 这类每日调度任务建议调用：
+
+```bash
+uv run --frozen python my_scripts/roguetrader1.py
+```
 
 ### 本地 processed/parquet 工作流
 
@@ -443,7 +460,7 @@ uv run --frozen python my_scripts/roguetrader_local_data.py \
 #### 方式 B：额外保存一份 Shell 转录日志
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1
 ```
 
 - 终端不会实时显示内容，标准输出和错误信息都会额外写入 `my_results/rogue_btc_0713.log`。
@@ -453,7 +470,7 @@ uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.lo
 #### 方式 C：边看终端输出，边额外保存 Shell 转录
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 - 屏幕上可以实时观察运行进度。
@@ -463,20 +480,20 @@ uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_bt
 如果希望 Python 输出尽量不被缓冲，可以使用 `-u`：
 
 ```bash
-uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
+uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 #### 方式 D：后台运行，关闭终端也尽量不中断
 
 ```bash
-nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1 &
+nohup uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1 &
 ```
 
 查看后台任务：
 
 ```bash
 jobs
-ps aux | grep roguetrader1
+ps aux | grep roguetrader0
 ```
 
 实时查看输出文件：
@@ -485,7 +502,7 @@ ps aux | grep roguetrader1
 tail -f my_results/rogue_btc_0713.log
 ```
 
-停止后台任务时，先通过 `ps aux | grep roguetrader1` 找到进程号，再执行：
+停止后台任务时，先通过 `ps aux | grep roguetrader0` 找到进程号，再执行：
 
 ```bash
 kill 进程号
@@ -495,23 +512,40 @@ kill 进程号
 
 | 场景 | 命令 |
 |------|------|
-| 完整运行 | `uv run --frozen python my_scripts/roguetrader1.py` |
-| 额外保存 Shell 转录 | `uv run --frozen python my_scripts/roguetrader1.py > my_results/报告名.log 2>&1` |
-| 边看边额外保存 | `uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 \| tee my_results/报告名.log` |
-| 后台运行 | `nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/报告名.log 2>&1 &` |
+| 手动完整运行 | `uv run --frozen python my_scripts/roguetrader0.py` |
+| 手动指定日期 | `uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13` |
+| 定时任务运行 | `uv run --frozen python my_scripts/roguetrader1.py` |
+| 额外保存 Shell 转录 | `uv run --frozen python my_scripts/roguetrader0.py > my_results/报告名.log 2>&1` |
+| 边看边额外保存 | `uv run --frozen python -u my_scripts/roguetrader0.py 2>&1 \| tee my_results/报告名.log` |
+| 后台运行 | `nohup uv run --frozen python -u my_scripts/roguetrader0.py > my_results/报告名.log 2>&1 &` |
 | 查看后台输出 | `tail -f my_results/报告名.log` |
 | 停止前台脚本 | `Ctrl+C` |
-| 停止后台脚本 | `ps aux \| grep roguetrader1` 后 `kill 进程号` |
+| 停止后台脚本 | `ps aux \| grep roguetrader0` 后 `kill 进程号` |
 
 #### 定制脚本参数
 
-若要修改运行内容，可编辑 `my_scripts/roguetrader1.py` 中的参数：
+手动运行时优先使用 `my_scripts/roguetrader0.py` 的命令行参数，不需要改代码：
 
-- `selected_analysts`：选择分析师，如 `market`、`social`、`news`、`fundamentals`、`onchain`。
-- `config["output_language"]`：设置输出语言，如 `Chinese` 或 `English`。
-- `config["max_debate_rounds"]`：设置多空研究员辩论轮数。
-- `config["max_recur_limit"]`：设置 LangGraph 递归限制，复杂分析可适当调大。
-- `rt.propagate("BTC-USD", "2026-07-13")`：修改交易标的和分析日期。
+```bash
+uv run --frozen python my_scripts/roguetrader0.py \
+  --ticker ETH-USD \
+  --date 2026-07-13 \
+  --analysts market,onchain \
+  --max-debate-rounds 1 \
+  --quick-model deepseek-v4-flash \
+  --deep-model deepseek-v4-pro
+```
+
+常用参数：
+
+- `--ticker`：交易标的，如 `BTC-USD`、`ETH-USD`。
+- `--date`：分析日期，格式为 `YYYY-MM-DD`；不传则使用当天日期。
+- `--analysts`：分析师列表，如 `market,onchain` 或 `market,social,news,fundamentals,onchain`。
+- `--output-language`：输出语言，如 `Chinese` 或 `English`。
+- `--max-debate-rounds`：多空研究员辩论轮数。
+- `--max-recur-limit`：LangGraph 递归限制，复杂分析可适当调大。
+
+`my_scripts/roguetrader1.py` 主要留给 Hermes/定时任务使用，建议保持稳定，避免日常手动实验频繁改动它。
 
 ### Python API
 
@@ -740,7 +774,8 @@ START → [按顺序执行选中的分析师]
 - **Ticker 映射表**：30+ 加密货币代码 → CoinGecko coin_id 的映射，附搜索 API 回退
 
 ### 个人脚本与结果
-- `my_scripts/roguetrader1.py` —— DeepSeek 配置 + BTC 完整多智能体演示
+- `my_scripts/roguetrader0.py` —— 手动运行入口，支持命令行参数
+- `my_scripts/roguetrader1.py` —— Hermes/定时任务入口，默认跑当日 BTC
 - `my_results/` —— 历史分析记录和 JSON 格式的完整状态日志
 
 ---

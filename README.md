@@ -283,7 +283,8 @@ RogueTrader/
 │   └── static/welcome.txt            # ASCII art splash screen
 │
 ├── my_scripts/                       # ★ Personal run scripts
-│   └── roguetrader1.py              # DeepSeek config + full BTC multi-agent demo
+│   ├── roguetrader0.py              # Manual entrypoint with command-line arguments
+│   └── roguetrader1.py              # Hermes/scheduler entrypoint for daily BTC runs
 │
 ├── my_results/                       # ★ Personal run outputs
 │   ├── 运行结果/
@@ -365,7 +366,7 @@ uv run --frozen roguetrader --help
 uv run --frozen roguetrader analyze --help
 ```
 
-The current baseline is **24 passing tests**. These tests cover provider/model validation, agent registry configuration, CLI behavior, output path normalization, on-chain analyst wiring, graph initialization, OpenAI-compatible client configuration, local Parquet data cutoffs, ticker handling, quick-start configuration, and deterministic signal extraction.
+The current baseline is **25 passing tests**. These tests cover provider/model validation, agent registry configuration, CLI behavior, output path normalization, on-chain analyst wiring, graph initialization, OpenAI-compatible client configuration, local Parquet data cutoffs, ticker handling, quick-start configuration, and deterministic signal extraction.
 
 ---
 
@@ -392,9 +393,14 @@ The CLI walks you through an 8-step wizard:
 
 ### Custom Scripts and Advanced Run Modes
 
-This working copy also includes personal/custom run scripts under `my_scripts/`. These scripts call the Python API directly and are useful for reproducible local runs with pre-filled configuration, analyst selection, ticker, and analysis date.
+This working copy also includes personal/custom run scripts under `my_scripts/`. These scripts call the Python API directly and are useful for reproducible local runs or daily scheduled runs.
 
-For example, `my_scripts/roguetrader1.py` loads `.env` from the project root, configures DeepSeek, sets Chinese output, runs all five analysts by default (market, social, news, fundamentals, and on-chain), and analyzes BTC. Run it from the project root so structured outputs are written consistently under `my_results/运行结果/`.
+Use the two script entrypoints differently:
+
+- `my_scripts/roguetrader0.py`: manual entrypoint with command-line arguments for ticker, date, analysts, models, and debate depth.
+- `my_scripts/roguetrader1.py`: Hermes/scheduler entrypoint, kept stable for daily `BTC-USD` runs.
+
+Both scripts load `.env` from the project root, configure DeepSeek by default, and write structured outputs under `my_results/运行结果/`.
 
 #### Preparation
 
@@ -405,13 +411,24 @@ conda activate roguetrader
 #### Mode A: Run directly and print to terminal
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py
+uv run --frozen python my_scripts/roguetrader0.py
 ```
 
 - Output is printed directly to the terminal.
 - Each run automatically creates `my_results/运行结果/<timestamp>_<ticker>/`.
 - That directory contains `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`, `运行配置.json`, `分段报告/`, and `终端日志.log`.
-- This is the recommended full multi-agent run mode.
+- This is the recommended manual full multi-agent run mode.
+- To run a fixed historical date:
+
+```bash
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13
+```
+
+For Hermes or crontab-style daily scheduling, use:
+
+```bash
+uv run --frozen python my_scripts/roguetrader1.py
+```
 
 ### Local Processed Parquet Workflow
 
@@ -438,7 +455,7 @@ This writes `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`
 #### Mode B: Save an extra shell transcript
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1
 ```
 
 - Nothing is printed live in the terminal; stdout and stderr are both additionally written to `my_results/rogue_btc_0713.log`.
@@ -448,7 +465,7 @@ uv run --frozen python my_scripts/roguetrader1.py > my_results/rogue_btc_0713.lo
 #### Mode C: Print live and save an extra shell transcript
 
 ```bash
-uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
+uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 - You can watch progress in the terminal in real time.
@@ -458,20 +475,20 @@ uv run --frozen python my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_bt
 To reduce Python output buffering, use `-u`:
 
 ```bash
-uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 | tee my_results/rogue_btc_0713.log
+uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
 ```
 
 #### Mode D: Run in the background
 
 ```bash
-nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/rogue_btc_0713.log 2>&1 &
+nohup uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1 &
 ```
 
 Check background jobs:
 
 ```bash
 jobs
-ps aux | grep roguetrader1
+ps aux | grep roguetrader0
 ```
 
 Follow the output file:
@@ -480,7 +497,7 @@ Follow the output file:
 tail -f my_results/rogue_btc_0713.log
 ```
 
-To stop a background run, find the process ID with `ps aux | grep roguetrader1`, then run:
+To stop a background run, find the process ID with `ps aux | grep roguetrader0`, then run:
 
 ```bash
 kill <pid>
@@ -490,23 +507,40 @@ kill <pid>
 
 | Scenario | Command |
 |----------|---------|
-| Full run | `uv run --frozen python my_scripts/roguetrader1.py` |
-| Extra shell transcript | `uv run --frozen python my_scripts/roguetrader1.py > my_results/report_name.log 2>&1` |
-| Print and save extra transcript | `uv run --frozen python -u my_scripts/roguetrader1.py 2>&1 \| tee my_results/report_name.log` |
-| Background run | `nohup uv run --frozen python -u my_scripts/roguetrader1.py > my_results/report_name.log 2>&1 &` |
+| Manual full run | `uv run --frozen python my_scripts/roguetrader0.py` |
+| Manual fixed date | `uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13` |
+| Scheduled run | `uv run --frozen python my_scripts/roguetrader1.py` |
+| Extra shell transcript | `uv run --frozen python my_scripts/roguetrader0.py > my_results/report_name.log 2>&1` |
+| Print and save extra transcript | `uv run --frozen python -u my_scripts/roguetrader0.py 2>&1 \| tee my_results/report_name.log` |
+| Background run | `nohup uv run --frozen python -u my_scripts/roguetrader0.py > my_results/report_name.log 2>&1 &` |
 | Follow background output | `tail -f my_results/report_name.log` |
 | Stop foreground run | `Ctrl+C` |
-| Stop background run | `ps aux \| grep roguetrader1`, then `kill <pid>` |
+| Stop background run | `ps aux \| grep roguetrader0`, then `kill <pid>` |
 
 #### Customizing Script Parameters
 
-To customize a run, edit `my_scripts/roguetrader1.py` and adjust:
+For manual runs, prefer `my_scripts/roguetrader0.py` command-line arguments instead of editing code:
 
-- `selected_analysts`: choose analysts such as `market`, `social`, `news`, `fundamentals`, `onchain`.
-- `config["output_language"]`: choose `Chinese` or `English` report output.
-- `config["max_debate_rounds"]`: set the Bull/Bear researcher debate rounds.
-- `config["max_recur_limit"]`: set the LangGraph recursion limit; increase for more complex runs.
-- `rt.propagate("BTC-USD", "2026-07-13")`: change the ticker and analysis date.
+```bash
+uv run --frozen python my_scripts/roguetrader0.py \
+  --ticker ETH-USD \
+  --date 2026-07-13 \
+  --analysts market,onchain \
+  --max-debate-rounds 1 \
+  --quick-model deepseek-v4-flash \
+  --deep-model deepseek-v4-pro
+```
+
+Common arguments:
+
+- `--ticker`: ticker symbol, such as `BTC-USD` or `ETH-USD`.
+- `--date`: analysis date in `YYYY-MM-DD`; defaults to today.
+- `--analysts`: analyst list, such as `market,onchain` or `market,social,news,fundamentals,onchain`.
+- `--output-language`: output language, such as `Chinese` or `English`.
+- `--max-debate-rounds`: Bull/Bear researcher debate rounds.
+- `--max-recur-limit`: LangGraph recursion limit; increase for more complex runs.
+
+`my_scripts/roguetrader1.py` is mainly for Hermes/scheduled runs and should stay stable rather than being edited for each manual experiment.
 
 ### Python API
 
@@ -735,7 +769,8 @@ This local working copy includes modifications beyond the upstream codebase:
 - **Ticker mapping**: 30+ crypto ticker → CoinGecko coin_id mappings with search API fallback
 
 ### Personal Scripts & Results
-- `my_scripts/roguetrader1.py` — DeepSeek config + full BTC multi-agent demo
+- `my_scripts/roguetrader0.py` — manual entrypoint with command-line arguments
+- `my_scripts/roguetrader1.py` — Hermes/scheduler entrypoint for daily BTC runs
 - `my_results/` — Historical analysis traces and full state logs in JSON
 
 ---
