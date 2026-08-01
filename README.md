@@ -6,6 +6,7 @@
 </p>
 
 ---
+**Heresy is buying high and selling low — these AI agents serve the God-Emperor of Alpha** 
 
 RogueTrader is an open-source multi-agent trading framework specializing in **both traditional financial assets and cryptocurrencies with on-chain data analysis**. Built on a LangGraph-based multi-agent architecture, it deploys specialized LLM-powered agents — from fundamental analysts, sentiment experts, technical analysts, to **on-chain data analysts** — that collaboratively evaluate market conditions and inform trading decisions through structured multi-agent debates.
 
