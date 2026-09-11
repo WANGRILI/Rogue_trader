@@ -1,838 +1,175 @@
-# RogueTrader: Multi-Agent LLM Crypto & Financial Trading Framework
+# RogueTrader
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="README_zh.md">中文</a>
+  <strong>多智能体市场研究、每日自动分析与结构化结果发布</strong>
 </p>
 
----
-**Heresy is buying high and selling low — these AI agents serve the God-Emperor of Alpha** 
+<p align="center">
+  <a href="README.md">中文</a> ·
+  <a href="README.en.md">English</a> ·
+  <a href="docs/control-panel.md">控制面板</a> ·
+  <a href="docs/production-development.md">生产运维</a>
+</p>
 
-RogueTrader is an open-source multi-agent trading framework specializing in **both traditional financial assets and cryptocurrencies with on-chain data analysis**. Built on a LangGraph-based multi-agent architecture, it deploys specialized LLM-powered agents — from fundamental analysts, sentiment experts, technical analysts, to **on-chain data analysts** — that collaboratively evaluate market conditions and inform trading decisions through structured multi-agent debates.
+RogueTrader 将多智能体投资研究流程和项目自己的生产调度器结合起来：每天按设定时间串行分析多个标的，生成结构化决策，先写入本地 CSV，再独立推送到飞书群和飞书电子表格。
 
-> **What makes RogueTrader different:** Deep cryptocurrency-native analysis. Beyond standard price/volume/technicals, RogueTrader analyzes **on-chain power structures** — whale concentration, DeFi TVL flows, stablecoin supply dynamics, mining economics, Pi Cycle indicators, CME gap detection, and more. It treats crypto assets not just as price charts, but as complex on-chain economies with governance dynamics and capital flow patterns.
+> 这是研究分析系统，不是自动实盘交易系统，也不构成投资建议。
 
----
+![RogueTrader 控制面板——脱敏生产状态示例](docs/assets/control-panel-production.png)
 
-## Architecture Overview
+_图片为脱敏示例状态，不包含真实凭据、个人路径或实际决策内容。_
 
-### Agent Pipeline
+## 核心能力
 
-```
-User Input (Ticker + Date)
-        │
-        ▼
-┌───────────────────────────────────────────┐
-│  PHASE 1: ANALYST TEAM (parallel data gathering) │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────┐  │
-│  │ Market   │ │ Social   │ │  News    │ │ Fundamentals │ │ On-Chain │  │
-│  │ Analyst  │ │ Media    │ │ Analyst  │ │   Analyst    │ │ Analyst  │  │
-│  │          │ │ Analyst  │ │          │ │              │ │   ★NEW   │  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘ └──────────┘  │
-└───────────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────┐
-│  PHASE 2: RESEARCH TEAM (structured debate) │
-│  Bull Researcher ←→ Bear Researcher       │
-│           ↓                               │
-│     Research Manager (judge)              │
-└───────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────┐
-│  PHASE 3: TRADER                       │
-│  Synthesizes all reports → trade plan  │
-└───────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────┐
-│  PHASE 4: RISK MANAGEMENT (three-way debate) │
-│  Aggressive ←→ Conservative ←→ Neutral       │
-│           ↓                               │
-│     Portfolio Manager (final decision)     │
-└───────────────────────────────────────┘
-        │
-        ▼
-   FINAL DECISION: BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL
-        │
-        ▼
-   Memory Reflection (BM25-based learning from outcomes)
+- **多智能体研究**：市场、社交、新闻、基本面和链上分析师协作，多空研究员与风控角色进行结构化辩论。
+- **每日自动调度**：本机控制面板管理总开关、北京时间、分析标的和每个标的的独立开关。
+- **多标的串行执行**：同一批标的依次运行，避免模型额度和数据源并发争用。
+- **CSV-first 发布**：每个完整结果先幂等追加到本地 CSV；后续通知只读取刚落盘的同一条记录。
+- **飞书双通道**：向飞书群发送简短卡片与完整决策摘要，同时向普通电子表格追加一行。
+- **失败隔离**：消息或表格失败只重试对应通道，不会重新触发付费分析。
+- **不可变生产版本**：生产环境运行固定 Git 标签、锁定依赖和独立虚拟环境，旧版本始终可回滚。
+- **开发/生产隔离**：源码、状态、缓存、结果目录和 `.env` 分离，开发不会覆盖生产运行态。
+
+## 工作流程
+
+```text
+本机控制面板
+  └── Asia/Shanghai 每日调度
+        └── 多标的串行分析
+              └── 运行索引.json（完成标记）
+                    └── 最终决策.json
+                          └── 每日决策.csv（唯一事实来源）
+                                ├── 本地消息包
+                                ├── 飞书群通知
+                                └── 飞书电子表格新行
 ```
 
-### Agent Roles
+发布器只消费完整结果。CSV、飞书消息和飞书表格分别记录状态，任何通知失败都不会反向影响分析任务。
 
-#### Analyst Team (Data Gathering)
-| Agent | Responsibility | Tools |
-|-------|---------------|-------|
-| **Market Analyst** | Technical analysis using price data and indicators | `get_stock_data`, `get_indicators` |
-| **Social Media Analyst** | Social sentiment and community metrics | `get_news`, `get_crypto_sentiment` |
-| **News Analyst** | Global news, macro events, insider transactions | `get_news`, `get_global_news`, `get_insider_transactions` |
-| **Fundamentals Analyst** | Company financials, valuation metrics | `get_fundamentals`, `get_balance_sheet`, `get_cashflow`, `get_income_statement` |
-| **On-Chain Analyst ★** | On-chain metrics, whale activity, DeFi TVL, stablecoin flows, mining stats, Pi Cycle, NVT, funding rates, CME gaps, Fear & Greed | 10 specialized crypto tools (see below) |
+## 快速操作
 
-#### Research Team (Debate)
-- **Bull Researcher**: Argues the bullish case, uses BM25 memory to recall similar past situations
-- **Bear Researcher**: Argues the bearish case, identifies risks and downside scenarios
-- **Research Manager**: Judges the debate, synthesizes bull/bear perspectives into a coherent investment thesis
-
-#### Execution & Risk
-- **Trader**: Composes all analyst and researcher reports into a concrete trading plan (timing, sizing, direction)
-- **Risk Management Trio** (Aggressive / Conservative / Neutral): Three-way debate evaluating portfolio risk from different perspectives
-- **Portfolio Manager**: Final approval/rejection of any proposed transaction
-
----
-
-## On-Chain Analysis Capabilities ★
-
-The **On-Chain Analyst** is RogueTrader's key differentiator, with 10 specialized tools across 4 analysis dimensions:
-
-### 1. Basic On-Chain Metrics
-| Tool | Data Source | Description |
-|------|-------------|-------------|
-| `get_onchain_metrics` | CoinGecko | Market cap, circulating/total/max supply, FDV, ATH/ATL, multi-timeframe price changes |
-| `get_nvt_ratio` | CoinGecko + Blockchain.com | Network Value to Transactions ratio (crypto's P/E ratio) — high = overvalued |
-
-### 2. Whale & Market Maker Control
-| Tool | Data Source | Description |
-|------|-------------|-------------|
-| `get_whale_activity` | CoinGecko (exchange tickers) | Exchange volume distribution, top-3 concentration, accumulation/distribution proxies |
-| `get_stablecoin_flows` | DeFiLlama | Top-15 stablecoin circulating supplies — available capital for crypto markets |
-
-### 3. DeFi & Layer Power Games
-| Tool | Data Source | Description |
-|------|-------------|-------------|
-| `get_defi_tvl` | DeFiLlama | Chain-level or protocol-level Total Value Locked — capital flow between ecosystems |
-| `get_mining_stats` | Blockchain.com | BTC hash rate, difficulty, transaction count, active addresses, miner revenue (7-day trends) |
-
-### 4. Technical & Sentiment Indicators
-| Tool | Data Source | Description |
-|------|-------------|-------------|
-| `get_pi_cycle_indicator` | CoinGecko / yfinance | 111-day MA × 350-day MA×2 — major cycle top/bottom detection |
-| `get_crypto_fear_greed` | Alternative.me | 0-100 sentiment index with 7-day/30-day trend analysis |
-| `get_funding_rate` | CoinGecko derivatives | Perpetual futures funding rates — crowded long/short detection |
-| `get_cme_gap` | yfinance | CME Bitcoin futures weekend gap detection (~77% historical fill rate) |
-
-### Analysis Philosophy
-
-The On-Chain Analyst goes beyond surface metrics. Its system prompt instructs it to analyze:
-
-- **Power Structure**: Who controls this asset? What are their incentives? Is it dominated by a small number of whales?
-- **Macro Game Theory**: Regulatory stance across jurisdictions, nation-state accumulation patterns, monetary policy impact
-- **Layer Power Games**: L1 dominance battles, L2 MEV and liquidity capture, cross-chain capital flows
-- **Manipulation Risk**: Explicit assessment of whether the asset is vulnerable to pump-and-dump or rug-pull scenarios
-
----
-
-## LLM Provider Support
-
-RogueTrader supports **7 LLM providers** through a unified factory pattern:
-
-| Provider | Models (Quick) | Models (Deep) | API Base |
-|----------|---------------|---------------|----------|
-| **DeepSeek** ★ (default) | `deepseek-v4-flash` | `deepseek-v4-pro` | `api.deepseek.com` |
-| **OpenAI** | GPT-5.4 Mini/Nano, GPT-4.1 | GPT-5.4, GPT-5.2, GPT-5.4 Pro | `api.openai.com` |
-| **Anthropic** | Claude Sonnet 4.6, Haiku 4.5 | Claude Opus 4.6, Sonnet 4.6 | `api.anthropic.com` |
-| **Google** | Gemini 3 Flash, 2.5 Flash | Gemini 3.1 Pro, 2.5 Pro | Google AI |
-| **xAI** | Grok 4.1 Fast | Grok 4, Grok 4.1 Fast | `api.x.ai` |
-| **OpenRouter** | NVIDIA Nemotron, GLM 4.5 | Same (free tier) | `openrouter.ai` |
-| **Ollama** | Qwen3, GPT-OSS, GLM-4.7 | Same (local) | `localhost:11434` |
-
-> **Why DeepSeek is default:** It offers an OpenAI-compatible API at significantly lower cost, with `deepseek-v4-pro` for deeper reasoning and `deepseek-v4-flash` for faster routine agent work.
-
-### Model Architecture
-
-```
-Deep Thinking LLM (deepseek-v4-pro)
-  ├── Research Manager (investment debate judge)
-  └── Portfolio Manager (risk debate judge + final decision)
-
-Quick Thinking LLM (deepseek-v4-flash)
-  ├── All 5 Analysts (market, social, news, fundamentals, onchain)
-  ├── Bull/Bear Researchers
-  ├── Trader
-  └── Risk Management Trio (aggressive, conservative, neutral)
-```
-
-### Agent Configuration
-
-RogueTrader also supports a beginner-friendly agent configuration file:
+### 生产控制面板
 
 ```bash
-configs/agents.yaml
+ops/production-control-panel-service start
+ops/production-control-panel-service status
+ops/production-control-panel-service stop
 ```
 
-Use it to adjust each agent's LLM route and persona without editing Python code:
+启动后访问 <http://127.0.0.1:8765>。面板只监听本机回环地址；后台服务需要保持运行，每日任务才会按时触发。
 
-```yaml
-agents:
-  onchain_analyst:
-    llm:
-      tier: quick
-      model: deepseek-v4-flash
-    prompt:
-      identity: |
-        You are RogueTrader's Lead On-Chain Analyst specializing in crypto assets.
-      focus: |
-        Focus on whale behavior, DeFi liquidity, stablecoin flows, derivatives positioning, and manipulation risk.
-      style: |
-        Explain conclusions in practical trading language, not only raw metrics.
-```
-
-You do not need to configure every agent. Missing fields automatically fall back to the built-in defaults. For A/B testing, set `ROGUETRADER_AGENT_CONFIG=/path/to/agents.yaml` to load a different file.
-
----
-
-## Memory System
-
-RogueTrader uses a **BM25-based lexical memory** system (no embedding API costs, no token limits):
-
-```
-FinancialSituationMemory (5 instances)
-  ├── bull_memory       → Bull Researcher
-  ├── bear_memory       → Bear Researcher
-  ├── trader_memory     → Trader
-  ├── invest_judge_memory → Research Manager
-  └── portfolio_manager_memory → Portfolio Manager
-```
-
-After each trading decision, the `Reflector` analyzes outcomes (returns/losses) against agent reasoning, extracts lessons learned, and stores `(situation, recommendation)` pairs. On subsequent analyses, agents retrieve the top-K most similar past situations via BM25 lexical matching to inform their current decision.
-
----
-
-## Project Structure
-
-```
-RogueTrader/
-├── main.py                          # Quick-start entry point
-├── pyproject.toml                    # Package configuration
-├── requirements.txt                  # Dependencies
-├── README.md                         # This file
-│
-├── roguetrader/                      # Core Python package
-│   ├── default_config.py             # All configuration defaults (DeepSeek by default)
-│   │
-│   ├── graph/                        # LangGraph orchestration
-│   │   ├── trading_graph.py          # Main orchestrator — RogueTraderGraph class
-│   │   ├── setup.py                  # GraphSetup — builds the agent workflow DAG
-│   │   ├── propagation.py            # Propagator — state initialization & graph args
-│   │   ├── conditional_logic.py      # ConditionalLogic — debate routing logic
-│   │   ├── reflection.py             # Reflector — post-trade learning from outcomes
-│   │   └── signal_processing.py      # SignalProcessor — extracts BUY/HOLD/SELL from final report
-│   │
-│   ├── agents/                       # 15 agent implementations
-│   │   ├── analysts/
-│   │   │   ├── market_analyst.py     # Technical analysis
-│   │   │   ├── social_media_analyst.py  # Social sentiment
-│   │   │   ├── news_analyst.py       # News & macro events
-│   │   │   ├── fundamentals_analyst.py  # Company fundamentals
-│   │   │   └── onchain_analyst.py    # ★ On-chain crypto analysis
-│   │   ├── researchers/
-│   │   │   ├── bull_researcher.py    # Bullish case argument
-│   │   │   └── bear_researcher.py    # Bearish case argument
-│   │   ├── managers/
-│   │   │   ├── research_manager.py   # Investment debate judge
-│   │   │   └── portfolio_manager.py  # Final decision maker
-│   │   ├── risk_mgmt/
-│   │   │   ├── aggressive_debator.py # Aggressive risk perspective
-│   │   │   ├── conservative_debator.py  # Conservative risk perspective
-│   │   │   └── neutral_debator.py    # Neutral risk perspective
-│   │   ├── trader/
-│   │   │   └── trader.py             # Trade plan synthesis
-│   │   └── utils/
-│   │       ├── agent_utils.py        # Shared utilities, language instructions
-│   │       ├── agent_states.py       # AgentState, InvestDebateState, RiskDebateState
-│   │       ├── memory.py             # BM25 FinancialSituationMemory
-│   │       ├── core_stock_tools.py   # Stock price/fundamentals tools
-│   │       ├── technical_indicators_tools.py  # Standard technical indicators
-│   │       ├── fundamental_data_tools.py      # Financial statement tools
-│   │       ├── news_data_tools.py             # News/insider transaction tools
-│   │       ├── onchain_data_tools.py          # ★ On-chain metrics tools (9 tools)
-│   │       ├── crypto_indicator_tools.py      # ★ Crypto-specific indicators (5 tools)
-│   │       └── crypto_sentiment_tools.py      # ★ Crypto sentiment tools (2 tools)
-│   │
-│   ├── dataflows/                    # Data pipelines (5 sources)
-│   │   ├── y_finance.py             # Yahoo Finance — stocks, fundamentals, news
-│   │   ├── alpha_vantage*.py         # Alpha Vantage — alternative data vendor
-│   │   ├── onchain_data.py           # ★ CoinGecko + DeFiLlama + Blockchain.com + Alternative.me
-│   │   ├── crypto_indicators.py      # ★ Pi Cycle, NVT, CME Gap, Funding Rate calculators
-│   │   ├── crypto_sentiment.py       # ★ Aggregated crypto sentiment pipeline
-│   │   ├── interface.py              # Abstract data vendor interface
-│   │   ├── config.py                 # Runtime config (updated from default_config)
-│   │   └── utils.py                  # Data processing utilities
-│   │
-│   └── llm_clients/                  # Multi-provider LLM abstraction
-│       ├── factory.py                # create_llm_client() — provider dispatch
-│       ├── base_client.py            # BaseLLMClient abstract class
-│       ├── openai_client.py          # OpenAI + DeepSeek + xAI + Ollama + OpenRouter
-│       ├── anthropic_client.py       # Anthropic Claude
-│       ├── google_client.py          # Google Gemini
-│       ├── model_catalog.py          # Centralized model registry (6 providers × 2 modes)
-│       ├── agent_registry.py         # Per-agent LLM routing and prompt profiles
-│       └── validators.py             # Model validation logic
-│
-├── configs/
-│   └── agents.yaml                   # Optional per-agent persona and model routing
-│
-├── cli/                              # Interactive terminal UI
-│   ├── main.py                       # Rich/Typer-based TUI (8-step wizard)
-│   ├── models.py                     # Analyst selection types
-│   ├── config.py                     # CLI-specific configuration
-│   ├── utils.py                      # Prompt functions for each selection step
-│   ├── announcements.py              # Community announcements fetcher
-│   ├── stats_handler.py              # LLM/tool call token tracking
-│   └── static/welcome.txt            # ASCII art splash screen
-│
-├── my_scripts/                       # ★ Personal run scripts
-│   ├── roguetrader0.py              # Manual entrypoint with command-line arguments
-│   └── roguetrader1.py              # Hermes/scheduler entrypoint for daily BTC runs
-│
-├── my_results/                       # ★ Personal run outputs
-│   ├── 运行结果/
-│   │   └── 20260712_104835_BTC_USD/
-│   │       ├── 运行索引.json
-│   │       ├── 报告.md
-│   │       ├── 状态.json
-│   │       ├── 最终决策.json
-│   │       ├── 运行配置.json
-│   │       ├── 终端日志.log
-│   │       └── 分段报告/
-│   ├── 评估结果/
-│   │   └── 20260712_110000_BTC_USD/
-│   │       ├── 评估报告.md
-│   │       ├── 评估结果.json
-│   │       └── 反思候选.json
-│   └── 图状态日志/                  # Historical legacy output only
-│
-└── tests/                            # Test files
-    ├── test_google_api_key.py
-    ├── test_model_validation.py
-    └── test_ticker_symbol_handling.py
-```
-
-> **★ = crypto/on-chain addition** — the features added for RogueTrader's crypto-focused workflow
-
----
-
-## Installation
-
-### Prerequisites
-- Python 3.10+
-- conda (recommended) or venv
-
-### Quick Setup
+### 手动分析
 
 ```bash
-# Clone
-git clone https://github.com/yourusername/RogueTrader.git
-cd RogueTrader
-
-# Create environment
-conda create -n roguetrader python=3.13 -y
-conda activate roguetrader
-
-# Install package (editable mode recommended for development)
-pip install -e .
+uv run --frozen python my_scripts/roguetrader0.py \
+  --ticker BTC-USD \
+  --date 2026-09-12 \
+  --no-debug
 ```
 
-### API Keys
+手动入口支持修改标的、日期、分析师、模型和辩论轮数。完整参数见[开发与手动运行](docs/development.md)。
 
-RogueTrader requires at least one LLM provider API key. The **default is DeepSeek**:
+### 查看生产版本
 
 ```bash
-export DEEPSEEK_API_KEY=your_key_here     # DeepSeek (default)
-# OR any of these alternatives:
-export OPENAI_API_KEY=...                 # OpenAI
-export ANTHROPIC_API_KEY=...              # Anthropic
-export GOOGLE_API_KEY=...                 # Google Gemini
-export XAI_API_KEY=...                    # xAI Grok
-export OPENROUTER_API_KEY=...             # OpenRouter
+./ops/release_manager.py status
+./ops/release_manager.py list
+.runtime/bin/run-version --check
 ```
 
-Alternatively, copy `.env.example` to `.env`:
+发布与回滚流程见[生产/开发双模式](docs/production-development.md)。
+
+## 结果结构
+
+```text
+my_results/
+├── 运行结果/
+│   └── <时间戳>_<标的>/
+│       ├── 运行索引.json
+│       ├── 最终决策.json
+│       ├── 报告.md
+│       ├── 状态.json
+│       ├── 运行配置.json
+│       ├── 终端日志.log
+│       └── 分段报告/
+└── 汇总/
+    ├── 每日决策.csv
+    └── 消息/
+```
+
+同一天的多个标的各占 CSV 一行，并通过 `event_id` 幂等去重。详细协议见[本地结果发布器](docs/local-publisher.md)。
+
+## 生产与开发
+
+| | 生产模式 | 开发模式 |
+|---|---|---|
+| 代码 | `.runtime/production/current` 指向不可变版本 | `.runtime/development/worktree` 的 `develop` 分支 |
+| 环境 | 每个版本独立 `.venv` | 开发专用 `.venv` |
+| 配置 | `.runtime/production/.env` | `.runtime/development/.env` |
+| 状态 | `.runtime/production/control-panel` | 开发 worktree 内 `.runtime/control-panel` |
+| 结果 | 项目根目录 `my_results/` | 开发 worktree 内 `my_results/` |
+
+两个面板默认使用相同本机端口，因此同一时间只运行一个。生产状态和发布数据库不位于版本源码目录中，升级后会继续沿用。
+
+## 安全边界
+
+- `.env`、密钥、运行结果、CSV、SQLite 状态库和日志均被 Git 忽略。
+- 控制面板不返回密钥，也不展示完整分析报告或决策正文。
+- 飞书凭据只从当前运行环境的 `.env` 读取。
+- 首次启用发布通道只建立历史基线，默认不回发旧结果。
+- 对飞书表格的数据行排序或筛选不影响按 `event_id` 去重；不要移动表头或修改协议列。
+
+## 分析引擎概览
+
+```text
+分析师团队
+  市场 · 社交 · 新闻 · 基本面 · 链上
+        ↓
+多头研究员 ↔ 空头研究员 → 研究经理
+        ↓
+交易员
+        ↓
+激进风控 ↔ 保守风控 ↔ 中立风控 → 投资组合经理
+        ↓
+BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL
+```
+
+引擎基于 LangGraph，支持 DeepSeek、OpenAI、Anthropic、Google、xAI、OpenRouter 和本地 Ollama。角色、数据工具和记忆机制见[分析引擎](docs/analysis-engine.md)，模型及数据源见[模型与数据源](docs/providers-and-data.md)。
+
+## 首次开发安装
+
+需要 Python 3.10+ 和 [uv](https://docs.astral.sh/uv/)：
 
 ```bash
+uv sync --frozen
 cp .env.example .env
-# Edit .env with your keys
+./ops/release_manager.py bootstrap
+./ops/release_manager.py setup-development
 ```
 
-### Verification
+只把真实凭据写入本地 `.env`，不要提交。完整步骤见[开发与手动运行](docs/development.md)。
 
-This working copy is expected to run with the locked `uv` environment:
+## 文档导航
+
+- [控制面板](docs/control-panel.md)：开关、时间、标的和发布通道。
+- [本地结果发布器](docs/local-publisher.md)：CSV-first、幂等、重试和飞书协议。
+- [生产/开发双模式](docs/production-development.md)：不可变发布、激活与回滚。
+- [分析引擎](docs/analysis-engine.md)：智能体角色、辩论流程和决策输出。
+- [模型与数据源](docs/providers-and-data.md)：Provider、行情、链上数据和标的格式。
+- [开发与手动运行](docs/development.md)：安装、测试、CLI 与本地数据模式。
+- [变更记录](CHANGELOG.md)：生产版本的主要变化。
+
+## 验证
 
 ```bash
 uv run --frozen python -m unittest discover -s tests -v
 uv run --frozen python -m compileall -q cli roguetrader tests my_scripts main.py
-uv run --frozen roguetrader --help
-uv run --frozen roguetrader analyze --help
 ```
 
-The current baseline is **25 passing tests**. These tests cover provider/model validation, agent registry configuration, CLI behavior, output path normalization, on-chain analyst wiring, graph initialization, OpenAI-compatible client configuration, local Parquet data cutoffs, ticker handling, quick-start configuration, and deterministic signal extraction.
+当前测试覆盖调度配置、控制面板安全策略、运行目录、信号提取、CSV 幂等、历史基线、飞书消息、飞书表格以及发布重试。
 
----
+## 许可证与来源
 
-## Usage
+Apache License 2.0，详见 [LICENSE](LICENSE)。
 
-### CLI (Interactive)
-
-```bash
-# Launch the interactive TUI
-roguetrader                    # installed command
-# OR
-python -m cli.main             # direct invocation
-```
-
-The CLI walks you through an 8-step wizard:
-1. Ticker symbol (e.g., `BTC-USD`, `ETH-USD`, `SPY`, `NVDA`)
-2. Analysis date
-3. Output language (English / Chinese)
-4. Analyst selection (market, social, news, fundamentals, onchain)
-5. Research depth (debate rounds: 1-3)
-6. LLM provider selection
-7. Model selection (quick + deep thinking)
-8. Provider-specific configuration (reasoning effort, thinking mode)
-
-### Custom Scripts and Advanced Run Modes
-
-This working copy also includes personal/custom run scripts under `my_scripts/`. These scripts call the Python API directly and are useful for reproducible local runs or daily scheduled runs.
-
-Use the two script entrypoints differently:
-
-- `my_scripts/roguetrader0.py`: manual entrypoint with command-line arguments for ticker, date, analysts, models, and debate depth.
-- `my_scripts/roguetrader1.py`: Hermes/scheduler entrypoint, kept stable for daily `BTC-USD` runs.
-
-Both scripts load `.env` from the project root, configure DeepSeek by default, and write structured outputs under `my_results/运行结果/`.
-
-#### Preparation
-
-```bash
-conda activate roguetrader
-```
-
-#### Mode A: Run directly and print to terminal
-
-```bash
-uv run --frozen python my_scripts/roguetrader0.py
-```
-
-- Output is printed directly to the terminal.
-- Each run automatically creates `my_results/运行结果/<timestamp>_<ticker>/`.
-- That directory contains `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`, `运行配置.json`, `分段报告/`, and `终端日志.log`.
-- This is the recommended manual full multi-agent run mode.
-- To run a fixed historical date:
-
-```bash
-uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13
-```
-
-For Hermes or crontab-style daily scheduling, use:
-
-```bash
-uv run --frozen python my_scripts/roguetrader1.py
-```
-
-### Local Processed Parquet Workflow
-
-For offline/local-data checks, use `my_scripts/roguetrader_local_data.py`. The runtime policy is:
-
-- `raw2` is treated as the upstream source of truth.
-- RogueTrader runtime tools read only standardized `processed/parquet`.
-- Local OHLCV summaries are cut off at the requested analysis date to avoid look-ahead bias.
-
-Smoke test without any LLM/API call:
-
-```bash
-uv run --frozen python my_scripts/roguetrader_local_data.py \
-  --skip-roguetrader \
-  --ticker BTC-USD \
-  --date 2014-11-30 \
-  --source manual_or_investing \
-  --timeframe 1d \
-  --days 30
-```
-
-This writes `运行索引.json`, `报告.md`, `状态.json`, `最终决策.json`, and `运行配置.json` under `my_results/运行结果/<timestamp>_<ticker>/`.
-
-#### Mode B: Save an extra shell transcript
-
-```bash
-uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1
-```
-
-- Nothing is printed live in the terminal; stdout and stderr are both additionally written to `my_results/rogue_btc_0713.log`.
-- `>` overwrites an existing file with the same name; use `>>` to append instead.
-- This is only an extra shell transcript. The standard complete output remains `my_results/运行结果/<timestamp>_<ticker>/`.
-
-#### Mode C: Print live and save an extra shell transcript
-
-```bash
-uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
-```
-
-- You can watch progress in the terminal in real time.
-- An extra shell transcript is also saved to `my_results/rogue_btc_0713.log`.
-- Manual `tee` is usually unnecessary because the standard run directory already writes `终端日志.log`.
-
-To reduce Python output buffering, use `-u`:
-
-```bash
-uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 2>&1 | tee my_results/rogue_btc_0713.log
-```
-
-#### Mode D: Run in the background
-
-```bash
-nohup uv run --frozen python -u my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13 > my_results/rogue_btc_0713.log 2>&1 &
-```
-
-Check background jobs:
-
-```bash
-jobs
-ps aux | grep roguetrader0
-```
-
-Follow the output file:
-
-```bash
-tail -f my_results/rogue_btc_0713.log
-```
-
-To stop a background run, find the process ID with `ps aux | grep roguetrader0`, then run:
-
-```bash
-kill <pid>
-```
-
-#### Command Cheat Sheet
-
-| Scenario | Command |
-|----------|---------|
-| Manual full run | `uv run --frozen python my_scripts/roguetrader0.py` |
-| Manual fixed date | `uv run --frozen python my_scripts/roguetrader0.py --ticker BTC-USD --date 2026-07-13` |
-| Scheduled run | `uv run --frozen python my_scripts/roguetrader1.py` |
-| Extra shell transcript | `uv run --frozen python my_scripts/roguetrader0.py > my_results/report_name.log 2>&1` |
-| Print and save extra transcript | `uv run --frozen python -u my_scripts/roguetrader0.py 2>&1 \| tee my_results/report_name.log` |
-| Background run | `nohup uv run --frozen python -u my_scripts/roguetrader0.py > my_results/report_name.log 2>&1 &` |
-| Follow background output | `tail -f my_results/report_name.log` |
-| Stop foreground run | `Ctrl+C` |
-| Stop background run | `ps aux \| grep roguetrader0`, then `kill <pid>` |
-
-#### Customizing Script Parameters
-
-For manual runs, prefer `my_scripts/roguetrader0.py` command-line arguments instead of editing code:
-
-```bash
-uv run --frozen python my_scripts/roguetrader0.py \
-  --ticker ETH-USD \
-  --date 2026-07-13 \
-  --analysts market,onchain \
-  --max-debate-rounds 1 \
-  --quick-model deepseek-v4-flash \
-  --deep-model deepseek-v4-pro
-```
-
-Common arguments:
-
-- `--ticker`: ticker symbol, such as `BTC-USD` or `ETH-USD`.
-- `--date`: analysis date in `YYYY-MM-DD`; defaults to today.
-- `--analysts`: analyst list, such as `market,onchain` or `market,social,news,fundamentals,onchain`.
-- `--output-language`: output language, such as `Chinese` or `English`.
-- `--max-debate-rounds`: Bull/Bear researcher debate rounds.
-- `--max-recur-limit`: LangGraph recursion limit; increase for more complex runs.
-
-`my_scripts/roguetrader1.py` is mainly for Hermes/scheduled runs and should stay stable rather than being edited for each manual experiment.
-
-### Python API
-
-#### Quick Start (Default DeepSeek Config)
-
-```python
-from roguetrader.graph.trading_graph import RogueTraderGraph
-from roguetrader.default_config import DEFAULT_CONFIG
-
-# Default config already uses DeepSeek
-rt = RogueTraderGraph(debug=True, config=DEFAULT_CONFIG.copy())
-_, decision = rt.propagate("ETH-USD", "2026-05-19")
-print(decision)  # BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL
-```
-
-#### On-Chain Analysis (Crypto-Focused)
-
-```python
-from roguetrader.graph.trading_graph import RogueTraderGraph
-from roguetrader.default_config import DEFAULT_CONFIG
-
-config = DEFAULT_CONFIG.copy()
-config["output_language"] = "Chinese"
-config["max_debate_rounds"] = 2
-
-# Use only on-chain analyst for crypto-native analysis
-rt = RogueTraderGraph(
-    debug=True,
-    config=config,
-    selected_analysts=["onchain"]
-)
-_, decision = rt.propagate("BTC-USD", "2026-05-19")
-print(decision)
-```
-
-#### Full Analyst Suite
-
-```python
-rt = RogueTraderGraph(
-    debug=True,
-    config=config,
-    selected_analysts=["market", "social", "news", "fundamentals", "onchain"]
-)
-_, decision = rt.propagate("ETH-USD", "2026-05-19")
-```
-
-#### Switching LLM Providers
-
-```python
-config = DEFAULT_CONFIG.copy()
-
-# OpenAI
-config["llm_provider"] = "openai"
-config["deep_think_llm"] = "gpt-5.4"
-config["quick_think_llm"] = "gpt-5.4-mini"
-
-# Anthropic
-config["llm_provider"] = "anthropic"
-config["deep_think_llm"] = "claude-opus-4-6"
-config["quick_think_llm"] = "claude-sonnet-4-6"
-
-# Google
-config["llm_provider"] = "google"
-config["deep_think_llm"] = "gemini-2.5-pro"
-config["quick_think_llm"] = "gemini-2.5-flash"
-
-# Local (Ollama)
-config["llm_provider"] = "ollama"
-config["deep_think_llm"] = "qwen3:latest"
-config["quick_think_llm"] = "qwen3:latest"
-```
-
-#### Learning from Outcomes (Reflection)
-
-```python
-rt = RogueTraderGraph(debug=True, config=config)
-
-# Initial analysis
-_, decision = rt.propagate("ETH-USD", "2026-05-19")
-
-# After you know the actual return, teach the agents
-rt.reflect_and_remember(returns_losses=+3.2)  # +3.2% return
-# This updates all 5 memory instances with lessons learned
-```
-
----
-
-## Configuration Reference
-
-All configuration lives in `roguetrader/default_config.py`:
-
-| Config Key | Default | Description |
-|------------|---------|-------------|
-| `llm_provider` | `deepseek` | LLM provider: openai, anthropic, google, xai, openrouter, ollama, deepseek |
-| `deep_think_llm` | `deepseek-v4-pro` | Model for complex reasoning (Research Manager, Portfolio Manager) |
-| `quick_think_llm` | `deepseek-v4-flash` | Model for routine tasks (analysts, researchers, trader, risk debators) |
-| `backend_url` | `https://api.deepseek.com` | API endpoint (auto-set per provider if blank) |
-| `output_language` | `English` | Report language. Use `Chinese` for Chinese output. Internal debates always English |
-| `max_debate_rounds` | `1` | Bull vs Bear debate rounds |
-| `max_risk_discuss_rounds` | `1` | Three-way risk debate rounds |
-| `max_recur_limit` | `20` | LangGraph recursion limit |
-| `data_vendors.onchain_data` | `coingecko` | On-chain data source: coingecko, defillama, blockchain_com |
-| `data_vendors.crypto_indicators` | `local` | Crypto indicator calculation: local (computed from data sources) |
-| `data_vendors.crypto_sentiment` | `coingecko` | Crypto sentiment source: coingecko, alternative_me |
-
-### Provider-Specific Options
-
-| Config Key | Values | Applies To |
-|------------|--------|------------|
-| `google_thinking_level` | `high`, `minimal`, `None` | Google Gemini |
-| `openai_reasoning_effort` | `low`, `medium`, `high`, `None` | OpenAI |
-| `anthropic_effort` | `low`, `medium`, `high`, `None` | Anthropic Claude |
-
----
-
-## Data Sources
-
-| Source | Used For | Authentication |
-|--------|----------|----------------|
-| **Yahoo Finance** (`yfinance`) | Stock prices, fundamentals, news, technical indicators | None (free) |
-| **CoinGecko API** | Crypto market data, OHLC, exchange volumes, derivatives, social metrics, trending | None (free tier) |
-| **DeFiLlama API** | Chain TVL, protocol TVL, stablecoin supplies | None (free) |
-| **Blockchain.com API** | BTC on-chain stats (hash rate, difficulty, transactions, active addresses, miner revenue) | None (free) |
-| **Alternative.me API** | Crypto Fear & Greed Index | None (free) |
-| **Alpha Vantage** | Alternative stock data vendor | API key required |
-
-> All crypto data sources use **free tiers with no API key required**, though rate limits apply. CoinGecko data is cached with `lru_cache` to minimize API calls.
-
----
-
-## Ticker Format
-
-RogueTrader uses **yfinance-compatible ticker symbols**:
-
-| Asset Type | Format | Examples |
-|------------|--------|----------|
-| Crypto (USD) | `XXX-USD` | `BTC-USD`, `ETH-USD`, `SOL-USD`, `DOGE-USD` |
-| Crypto (USDT) | `XXX-USDT` | `BTC-USDT`, `ETH-USDT` |
-| US Stocks | `SYMBOL` | `SPY`, `NVDA`, `AAPL`, `TSLA` |
-| International | `SYMBOL.EXCHANGE` | `CNC.TO`, `7203.T`, `0700.HK` |
-| Futures | `SYMBOL=F` | `GC=F` (Gold), `CL=F` (Crude Oil) |
-
-The On-Chain Analyst automatically resolves yfinance tickers to CoinGecko coin IDs (e.g., `BTC-USD` → `bitcoin`, `ETH-USD` → `ethereum`). 30+ cryptocurrencies are pre-mapped; unknown tickers fall back to CoinGecko search API.
-
----
-
-## Under the Hood
-
-### LangGraph Workflow
-
-The framework is built on **LangGraph** with a directed acyclic graph structure:
-
-```
-START → [Selected Analysts in sequence]
-           ↓
-     Bull Researcher ⇄ Bear Researcher  (conditional loop: debate rounds)
-           ↓
-     Research Manager
-           ↓
-     Trader
-           ↓
-     Aggressive → Conservative → Neutral  (conditional loop: risk rounds)
-           ↓
-     Portfolio Manager → END
-```
-
-- Each analyst node conditionally loops to its tool node until all needed data is gathered
-- Bull/Bear researchers alternate until debate rounds are exhausted, then proceed to Research Manager
-- Risk management trio rotates until risk rounds are exhausted, then proceeds to Portfolio Manager
-- All state accumulates in a shared `AgentState` TypedDict
-
-### Data Flow Architecture
-
-```
-User ticker + date
-    │
-    ▼
-┌─────────────┐    ┌──────────────────┐
-│  Dataflows  │───▶│  Agent Tools     │
-│  (raw data) │    │  (LangChain @tool)│
-└─────────────┘    └──────────────────┘
-                          │
-                          ▼
-                   ┌──────────────┐
-                   │   Analysts   │
-                   │  (LLM + tools)│
-                   └──────────────┘
-                          │
-                          ▼
-                   ┌──────────────┐
-                   │ Researchers  │
-                   │ + Managers   │
-                   │ (deep LLM)   │
-                   └──────────────┘
-                          │
-                          ▼
-                   FINAL DECISION
-```
-
-- **Dataflows** are pure Python functions calling external APIs — no LLM dependency
-- **Agent Tools** wrap dataflows as LangChain `@tool` decorators for LLM function calling
-- **Analysts** use Quick Thinking LLM + bound tools to gather and analyze data
-- **Managers** use Deep Thinking LLM to synthesize, judge, and decide
-
----
-
-## Local Customizations (This Instance)
-
-This local working copy includes modifications beyond the upstream codebase:
-
-### Configuration Changes
-- **Default LLM**: Changed from OpenAI GPT to **DeepSeek** (`deepseek-v4-pro` + `deepseek-v4-flash`)
-- **Default backend URL**: `https://api.deepseek.com`
-- Added `deepseek` as a recognized provider in the LLM factory (uses OpenAI-compatible API path)
-
-### Crypto/On-Chain Additions
-- **On-Chain Analyst agent** (`onchain_analyst.py`) — full agent with 4-dimension analysis framework
-- **16 on-chain/crypto tools** across 3 tool modules:
-  - `onchain_data_tools.py` — 9 tools (market data, whale activity, DeFi TVL, stablecoin flows, mining stats, Pi Cycle, NVT, Fear & Greed, funding rates, CME gaps)
-  - `crypto_indicator_tools.py` — 5 tools (Pi Cycle, NVT Ratio, CME Gap, Funding Rate, Fear & Greed)
-  - `crypto_sentiment_tools.py` — 2 tools (aggregated crypto sentiment, trending coins)
-- **3 crypto dataflow modules**:
-  - `onchain_data.py` — CoinGecko + DeFiLlama + Blockchain.com + Alternative.me integration (400+ lines)
-  - `crypto_indicators.py` — Pi Cycle, NVT Ratio, CME Gap, Funding Rate calculators
-  - `crypto_sentiment.py` — Aggregated crypto sentiment pipeline
-- **Ticker mapping**: 30+ crypto ticker → CoinGecko coin_id mappings with search API fallback
-
-### Personal Scripts & Results
-- `my_scripts/roguetrader0.py` — manual entrypoint with command-line arguments
-- `my_scripts/roguetrader1.py` — Hermes/scheduler entrypoint for daily BTC runs
-- `my_results/` — Historical analysis traces and full state logs in JSON
-
----
-
-## Package Dependencies
-
-```
-langgraph >= 0.4.8          # Agent workflow orchestration
-langchain-openai >= 0.3.23  # OpenAI-compatible LLM client (DeepSeek, xAI, etc.)
-langchain-anthropic >= 0.3.15  # Anthropic Claude client
-langchain-google-genai >= 2.1.5  # Google Gemini client
-langchain-experimental >= 0.3.4
-yfinance >= 0.2.63          # Stock/crypto price data
-stockstats >= 0.6.5         # Technical indicators
-pandas >= 2.3.0             # Data manipulation
-pyarrow >= 16.0.0           # Local processed Parquet runtime data
-requests >= 2.32.4          # HTTP client for crypto APIs
-rank-bm25 >= 0.2.2          # BM25 lexical search for memory
-rich >= 14.0.0              # Terminal UI (CLI)
-typer >= 0.21.0             # CLI framework
-questionary >= 2.1.0        # Interactive prompts
-redis >= 6.2.0              # Optional: memory persistence
-python-dotenv >= 1.0.0      # Environment variable loading
-PyYAML >= 6.0.2             # Agent YAML configuration
-```
-
----
-
-## Current Readiness
-
-What is currently verified:
-
-- Locked `uv` environment works with `uv run --frozen`.
-- CLI command/help paths work as `roguetrader` / `roguetrader analyze`.
-- `RogueTraderGraph` initializes with the on-chain analyst and OpenAI-compatible providers.
-- Local processed Parquet summaries avoid look-ahead bias by cutting data at the analysis date.
-- Local report/state generation works in `--skip-roguetrader` mode and now writes to normalized Chinese output paths under `my_results/运行结果/`.
-- Direct `RogueTraderGraph.propagate()` runs now also write a single normalized run directory with an index, report, state, structured decision JSON, config, and section reports.
-- Offline signal evaluation writes to normalized Chinese output paths under `my_results/评估结果/`.
-- Final decision extraction avoids an extra LLM call when the report already contains an explicit decision.
-
-Known boundaries:
-
-- Full end-to-end multi-agent analysis still requires a working LLM provider key or local Ollama endpoint.
-- Online on-chain APIs such as CoinGecko, DeFiLlama, Blockchain.com, Alternative.me, and yfinance may return current/live data; they are not yet guaranteed point-in-time historical datasets for backtests.
-- Local processed Parquet is the safer path for historical/offline evaluation.
-- This is a research framework, not an execution engine or financial advice system.
-
----
-
-## Contributing
-
-Contributions are welcome — especially:
-
-- Additional on-chain data sources (Glassnode, Dune Analytics, Arkham, etc.)
-- New crypto-specific indicators
-- Multi-asset portfolio optimization
-- Backtesting integration
-
-## License
-
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-RogueTrader is an independent modified derivative of the [TradingAgents](https://github.com/TauricResearch/TradingAgents) project by [Tauric Research](https://tauric.ai/). See [NOTICE](NOTICE) for upstream attribution and modification notes.
+RogueTrader 基于 Tauric Research 的 [TradingAgents](https://github.com/TauricResearch/TradingAgents) 演进而来；归属与修改说明见 [NOTICE](NOTICE)。

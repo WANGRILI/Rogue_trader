@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+PANEL_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PANEL_STATE_DIR="$PANEL_PROJECT_ROOT/.runtime/control-panel"
+PANEL_PID_FILE="$PANEL_STATE_DIR/service.pid"
+PANEL_LOG_FILE="$PANEL_STATE_DIR/service.log"
+PANEL_ACTION="${1:-status}"
+
+panel_pid() {
+  if [[ -f "$PANEL_PID_FILE" ]]; then
+    PANEL_PID_VALUE="$(tr -d '[:space:]' < "$PANEL_PID_FILE")"
+    [[ "$PANEL_PID_VALUE" =~ ^[0-9]+$ ]] && printf '%s' "$PANEL_PID_VALUE"
+  fi
+}
+
+panel_is_running() {
+  local candidate
+  local command_line
+  candidate="$(panel_pid || true)"
+  [[ -n "$candidate" ]] || return 1
+  kill -0 "$candidate" 2>/dev/null || return 1
+  [[ -r "/proc/$candidate/cmdline" ]] || return 1
+  command_line="$(tr '\0' ' ' < "/proc/$candidate/cmdline")"
+  [[ "$command_line" == *"roguetrader.control_panel"* ]]
+  [[ "$command_line" == *"$PANEL_STATE_DIR"* ]]
+}
+
+case "$PANEL_ACTION" in
+  start)
+    if panel_is_running; then
+      echo "RogueTrader 开发控制面板已在运行：PID $(panel_pid)"
+      exit 0
+    fi
+    [[ -x "$PANEL_PROJECT_ROOT/.venv/bin/python" ]] || {
+      echo "Development environment is missing: $PANEL_PROJECT_ROOT/.venv" >&2
+      exit 69
+    }
+    mkdir -p "$PANEL_STATE_DIR"
+    cd "$PANEL_PROJECT_ROOT"
+    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 nohup setsid \
+      .venv/bin/python -m roguetrader.control_panel \
+      --state-dir "$PANEL_STATE_DIR" >> "$PANEL_LOG_FILE" 2>&1 < /dev/null &
+    PANEL_STARTED_PID=$!
+    printf '%s\n' "$PANEL_STARTED_PID" > "$PANEL_PID_FILE"
+    sleep 1
+    if ! kill -0 "$PANEL_STARTED_PID" 2>/dev/null; then
+      rm -f "$PANEL_PID_FILE"
+      echo "控制面板启动失败，请查看：$PANEL_LOG_FILE" >&2
+      exit 1
+    fi
+    echo "RogueTrader 开发控制面板已启动：http://127.0.0.1:8765"
+    echo "PID：$PANEL_STARTED_PID；日志：$PANEL_LOG_FILE"
+    ;;
+  stop)
+    if ! panel_is_running; then
+      echo "RogueTrader 开发控制面板未运行。"
+      exit 0
+    fi
+    PANEL_STOP_PID="$(panel_pid)"
+    kill "$PANEL_STOP_PID"
+    for _attempt in {1..20}; do
+      kill -0 "$PANEL_STOP_PID" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$PANEL_STOP_PID" 2>/dev/null; then
+      echo "控制面板仍在退出中：PID $PANEL_STOP_PID" >&2
+      exit 1
+    fi
+    rm -f "$PANEL_PID_FILE"
+    echo "RogueTrader 开发控制面板已停止。"
+    ;;
+  status)
+    if panel_is_running; then
+      echo "status=running pid=$(panel_pid) url=http://127.0.0.1:8765"
+    else
+      echo "status=stopped"
+      exit 3
+    fi
+    ;;
+  *)
+    echo "用法：ops/control-panel-service {start|stop|status}" >&2
+    exit 64
+    ;;
+esac

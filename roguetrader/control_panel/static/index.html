@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RogueTrader 控制台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">ROGUETRADER · CONTROL PANEL</p>
+          <h1>每日分析控制台</h1>
+          <p class="subtitle">独立管理执行开关、北京时间与分析标的。所有设置仅作用于项目调度器。</p>
+        </div>
+        <div id="serviceBadge" class="status-badge">正在连接</div>
+      </header>
+
+      <section class="summary-grid" aria-label="任务概览">
+        <article class="metric-card">
+          <span>任务状态</span>
+          <strong id="scheduleState">—</strong>
+        </article>
+        <article class="metric-card">
+          <span>下次执行</span>
+          <strong id="nextRun">—</strong>
+        </article>
+        <article class="metric-card">
+          <span>启用标的</span>
+          <strong id="enabledCount">—</strong>
+        </article>
+      </section>
+
+      <section class="panel schedule-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">SCHEDULE</p>
+            <h2>每日任务</h2>
+          </div>
+          <label class="switch-control">
+            <input id="masterToggle" type="checkbox" role="switch">
+            <span class="switch" aria-hidden="true"></span>
+            <span id="masterLabel">已关闭</span>
+          </label>
+        </div>
+
+        <div class="time-row">
+          <label for="dailyTime">
+            <span>每日执行时间</span>
+            <small>Asia/Shanghai</small>
+          </label>
+          <div class="time-action">
+            <input id="dailyTime" type="time" step="60" value="05:00">
+            <button id="saveTime" class="button primary" type="button">保存时间</button>
+          </div>
+        </div>
+        <p class="hint">启用或修改时间后，从下一个未来时刻开始执行；不会自动补跑已经错过的任务。</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading ticker-heading">
+          <div>
+            <p class="section-label">UNIVERSE</p>
+            <h2>分析标的</h2>
+          </div>
+          <form id="addTickerForm" class="add-form">
+            <label class="sr-only" for="tickerInput">新增标的</label>
+            <input id="tickerInput" type="text" maxlength="32" placeholder="例如 ETH-USD" autocomplete="off">
+            <button class="button secondary" type="submit">添加标的</button>
+          </form>
+        </div>
+        <div id="tickerList" class="ticker-list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">ACTIVITY</p>
+            <h2>最近执行</h2>
+          </div>
+          <button id="refreshButton" class="button ghost" type="button">刷新</button>
+        </div>
+        <div id="runHistory" class="history-list"></div>
+      </section>
+
+      <section class="panel publisher-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">LOCAL PUBLISHER</p>
+            <h2>本地结果发布</h2>
+          </div>
+          <span id="publisherState" class="inline-state">正在连接</span>
+        </div>
+        <div class="publisher-grid">
+          <div>
+            <span>本轮新发布</span>
+            <strong id="lastPublished">—</strong>
+          </div>
+          <div>
+            <span>首次忽略的历史结果</span>
+            <strong id="baselineCount">—</strong>
+          </div>
+          <div>
+            <span>最近扫描</span>
+            <strong id="lastPublisherScan">—</strong>
+          </div>
+        </div>
+        <p class="hint">新结果会幂等追加到 <code>my_results/汇总/每日决策.csv</code> 并生成本地消息包；飞书群消息和飞书表格同步由下方两个独立开关控制。</p>
+
+        <div class="channel-card">
+          <div class="channel-heading">
+            <div>
+              <p class="section-label">FEISHU GROUP</p>
+              <h3>飞书群通知</h3>
+            </div>
+            <label class="switch-control">
+              <input id="feishuToggle" type="checkbox" role="switch">
+              <span class="switch" aria-hidden="true"></span>
+              <span id="feishuToggleLabel">已关闭</span>
+            </label>
+          </div>
+          <div class="publisher-grid feishu-grid">
+            <div>
+              <span>机器人配置</span>
+              <strong id="feishuConfigured">—</strong>
+            </div>
+            <div>
+              <span>最近测试</span>
+              <strong id="feishuLastTest">—</strong>
+            </div>
+            <div>
+              <span>最近送达</span>
+              <strong id="feishuLastSuccess">—</strong>
+            </div>
+            <div>
+              <span>等待重试</span>
+              <strong id="feishuPending">—</strong>
+            </div>
+            <div>
+              <span>已过期</span>
+              <strong id="feishuExpired">—</strong>
+            </div>
+            <div>
+              <span>最近错误</span>
+              <strong id="feishuLastError">—</strong>
+            </div>
+          </div>
+          <div class="channel-actions">
+            <button id="testFeishu" class="button secondary" type="button">发送测试卡片</button>
+            <button id="retryFeishu" class="button ghost" type="button">立即重试</button>
+          </div>
+          <p class="hint">Webhook 与加签密钥只从当前运行环境的 <code>.env</code> 读取，页面和接口不会返回密钥。测试成功后才能开启自动推送。</p>
+        </div>
+
+        <div class="channel-card">
+          <div class="channel-heading">
+            <div>
+              <p class="section-label">FEISHU SHEET</p>
+              <h3>飞书表格同步</h3>
+            </div>
+            <label class="switch-control">
+              <input id="feishuSheetToggle" type="checkbox" role="switch">
+              <span class="switch" aria-hidden="true"></span>
+              <span id="feishuSheetToggleLabel">已关闭</span>
+            </label>
+          </div>
+          <div class="publisher-grid feishu-grid">
+            <div>
+              <span>应用与表格配置</span>
+              <strong id="feishuSheetConfigured">—</strong>
+            </div>
+            <div>
+              <span>最近测试</span>
+              <strong id="feishuSheetLastTest">—</strong>
+            </div>
+            <div>
+              <span>最近同步</span>
+              <strong id="feishuSheetLastSuccess">—</strong>
+            </div>
+            <div>
+              <span>等待重试</span>
+              <strong id="feishuSheetPending">—</strong>
+            </div>
+            <div>
+              <span>已过期</span>
+              <strong id="feishuSheetExpired">—</strong>
+            </div>
+            <div>
+              <span>最近错误</span>
+              <strong id="feishuSheetLastError">—</strong>
+            </div>
+          </div>
+          <div class="channel-actions">
+            <button id="testFeishuSheet" class="button secondary" type="button">测试表格连接</button>
+            <button id="retryFeishuSheet" class="button ghost" type="button">立即重试</button>
+          </div>
+          <p class="hint">每个标的每天追加一行，并用 <code>event_id</code> 双重去重。App Secret 只从当前运行环境的 <code>.env</code> 读取；连接测试只校验权限和表头，不写入虚假决策。</p>
+        </div>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <footer>本面板只监听本机地址，不展示 API 密钥或生成结果正文。</footer>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

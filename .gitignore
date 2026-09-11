@@ -225,5 +225,8 @@ my_scripts/eval_results/
 # Local agent/session state
 .claw/
 
+# Local production/development runtime state and immutable releases
+.runtime/
+
 # Local memory database
 roguetrader/memory_db/*.sqlite3

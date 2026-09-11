@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "roguetrader"
-version = "1.0.0"
+version = "1.1.2"
 description = "RogueTrader: Multi-Agents LLM Crypto & Financial Trading Framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,9 +37,12 @@ dependencies = [
 
 [project.scripts]
 roguetrader = "cli.main:app"
+roguetrader-control-panel = "roguetrader.control_panel.__main__:main"
+roguetrader-publisher = "roguetrader.publisher.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["roguetrader*", "cli*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
+roguetrader = ["control_panel/static/*"]

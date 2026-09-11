@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+CONTROL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME_ROOT="$CONTROL_ROOT/.runtime"
+RELEASES_DIR="$RUNTIME_ROOT/releases"
+CURRENT_LINK="$RUNTIME_ROOT/production/current"
+PANEL_STATE_DIR="$RUNTIME_ROOT/production/control-panel"
+PANEL_PID_FILE="$PANEL_STATE_DIR/service.pid"
+PANEL_LOG_FILE="$PANEL_STATE_DIR/service.log"
+PANEL_URL="http://127.0.0.1:8765"
+PANEL_ACTION="${1:-status}"
+
+active_release() {
+  [[ -L "$CURRENT_LINK" ]] || {
+    echo "No production release is active: $CURRENT_LINK" >&2
+    return 69
+  }
+  local candidate
+  candidate="$(readlink -f "$CURRENT_LINK")"
+  case "$candidate" in
+    "$RELEASES_DIR"/*) ;;
+    *)
+      echo "Production release resolves outside the release directory: $candidate" >&2
+      return 69
+      ;;
+  esac
+  [[ -f "$candidate/.rogue-release.json" ]] || {
+    echo "Production release metadata is missing: $candidate" >&2
+    return 69
+  }
+  [[ -x "$candidate/.venv/bin/python" ]] || {
+    echo "Production release Python is missing: $candidate/.venv/bin/python" >&2
+    return 69
+  }
+  printf '%s' "$candidate"
+}
+
+panel_pid() {
+  if [[ -f "$PANEL_PID_FILE" ]]; then
+    local candidate
+    candidate="$(tr -d '[:space:]' < "$PANEL_PID_FILE")"
+    [[ "$candidate" =~ ^[0-9]+$ ]] && printf '%s' "$candidate"
+  fi
+}
+
+panel_is_running() {
+  local candidate
+  local command_line
+  candidate="$(panel_pid || true)"
+  [[ -n "$candidate" ]] || return 1
+  kill -0 "$candidate" 2>/dev/null || return 1
+  [[ -r "/proc/$candidate/cmdline" ]] || return 1
+  command_line="$(tr '\0' ' ' < "/proc/$candidate/cmdline")"
+  [[ "$command_line" == *"roguetrader.control_panel"* ]]
+  [[ "$command_line" == *"$PANEL_STATE_DIR"* ]]
+}
+
+running_release() {
+  local candidate
+  local command_line
+  candidate="$(panel_pid || true)"
+  [[ -n "$candidate" && -r "/proc/$candidate/cmdline" ]] || return 1
+  command_line="$(tr '\0' ' ' < "/proc/$candidate/cmdline")"
+  if [[ "$command_line" =~ ($RELEASES_DIR/[^[:space:]]+)/\.venv/bin/python ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+case "$PANEL_ACTION" in
+  start)
+    if panel_is_running; then
+      RELEASE="$(active_release)"
+      RUNNING_RELEASE="$(running_release || true)"
+      if [[ "$RUNNING_RELEASE" == "$RELEASE" ]]; then
+        echo "RogueTrader 生产控制面板已在运行：version=$(basename "$RELEASE") pid=$(panel_pid)"
+        exit 0
+      fi
+      echo "生产版本已切换，但控制面板仍运行旧版本；请先 stop 再 start。" >&2
+      exit 69
+    fi
+    RELEASE="$(active_release)"
+    "$CONTROL_ROOT/.runtime/bin/run-version" --check >/dev/null
+    mkdir -p "$PANEL_STATE_DIR"
+    cd "$RELEASE"
+    ROGUETRADER_RUNTIME_MODE=production \
+      ROGUETRADER_RELEASE_VERSION="$(basename "$RELEASE")" \
+      PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 nohup setsid \
+      "$RELEASE/.venv/bin/python" -m roguetrader.control_panel \
+      --state-dir "$PANEL_STATE_DIR" >> "$PANEL_LOG_FILE" 2>&1 < /dev/null &
+    PANEL_STARTED_PID=$!
+    printf '%s\n' "$PANEL_STARTED_PID" > "$PANEL_PID_FILE"
+    for _attempt in {1..40}; do
+      if ! kill -0 "$PANEL_STARTED_PID" 2>/dev/null; then
+        break
+      fi
+      if curl --fail --silent --show-error --max-time 1 \
+        "$PANEL_URL/api/status" >/dev/null 2>&1; then
+        echo "RogueTrader 生产控制面板已启动：$PANEL_URL"
+        echo "version=$(basename "$RELEASE") pid=$PANEL_STARTED_PID log=$PANEL_LOG_FILE"
+        exit 0
+      fi
+      sleep 0.25
+    done
+    if kill -0 "$PANEL_STARTED_PID" 2>/dev/null; then
+      kill "$PANEL_STARTED_PID" 2>/dev/null || true
+    fi
+    rm -f "$PANEL_PID_FILE"
+    echo "生产控制面板启动失败，请查看：$PANEL_LOG_FILE" >&2
+    exit 1
+    ;;
+  stop)
+    if ! panel_is_running; then
+      echo "RogueTrader 生产控制面板未运行。"
+      exit 0
+    fi
+    PANEL_STOP_PID="$(panel_pid)"
+    kill "$PANEL_STOP_PID"
+    for _attempt in {1..20}; do
+      kill -0 "$PANEL_STOP_PID" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$PANEL_STOP_PID" 2>/dev/null; then
+      echo "生产控制面板仍在退出中：PID $PANEL_STOP_PID" >&2
+      exit 1
+    fi
+    rm -f "$PANEL_PID_FILE"
+    echo "RogueTrader 生产控制面板已停止。"
+    ;;
+  status)
+    if panel_is_running; then
+      RELEASE="$(active_release)"
+      RUNNING_RELEASE="$(running_release || true)"
+      if [[ "$RUNNING_RELEASE" == "$RELEASE" ]]; then
+        echo "status=running mode=production version=$(basename "$RELEASE") pid=$(panel_pid) url=$PANEL_URL"
+      else
+        echo "status=restart-required mode=production active=$(basename "$RELEASE") running=$(basename "$RUNNING_RELEASE") pid=$(panel_pid) url=$PANEL_URL"
+        exit 4
+      fi
+    else
+      echo "status=stopped mode=production"
+      exit 3
+    fi
+    ;;
+  *)
+    echo "用法：ops/production-control-panel-service {start|stop|status}" >&2
+    exit 64
+    ;;
+esac

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Run the isolated development worktree; never execute development in project root.
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEVELOPMENT_ROOT="$PROJECT_ROOT/.runtime/development/worktree"
+
+if [[ "${1:-}" == "--check" ]]; then
+  if [[ ! -d "$DEVELOPMENT_ROOT" ]]; then
+    echo "mode=development status=not-created path=$DEVELOPMENT_ROOT"
+    exit 0
+  fi
+  BRANCH="$(git -C "$DEVELOPMENT_ROOT" branch --show-current)"
+  COMMIT="$(git -C "$DEVELOPMENT_ROOT" rev-parse --short=12 HEAD)"
+  echo "mode=development status=ready branch=${BRANCH:-detached} commit=$COMMIT"
+  echo "path=$DEVELOPMENT_ROOT"
+  echo "results=$DEVELOPMENT_ROOT/my_results"
+  echo "data_cache=$DEVELOPMENT_ROOT/roguetrader/dataflows/data_cache"
+  exit 0
+fi
+
+[[ -x "$DEVELOPMENT_ROOT/.venv/bin/python" ]] || {
+  echo "Development environment is not initialized." >&2
+  echo "Run: ./ops/release_manager.py setup-development" >&2
+  exit 69
+}
+
+cd "$DEVELOPMENT_ROOT"
+export ROGUETRADER_RUNTIME_MODE="development"
+export PYTHONDONTWRITEBYTECODE=1
+exec .venv/bin/python my_scripts/roguetrader0.py "$@"

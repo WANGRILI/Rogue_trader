@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+[[ -x .venv/bin/python ]] || {
+  echo "Development environment is not initialized." >&2
+  exit 69
+}
+
+exec .venv/bin/python -m roguetrader.publisher feishu-sheet-test

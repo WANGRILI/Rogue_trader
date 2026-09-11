@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Run the active or explicitly selected immutable project release.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SCRIPT_DIR" == */.runtime/bin ]]; then
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+else
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+RUNTIME_ROOT="$PROJECT_ROOT/.runtime"
+RELEASES_DIR="$RUNTIME_ROOT/releases"
+CURRENT_LINK="$RUNTIME_ROOT/production/current"
+LOCK_FILE="$RUNTIME_ROOT/locks/production.lock"
+
+VERSION=""
+FOREGROUND=0
+CHECK_ONLY=0
+PASSTHROUGH=()
+
+usage() {
+  echo "Usage: $0 [--version VERSION] [--foreground] [--check] [-- ARGS...]"
+}
+
+while (($#)); do
+  case "$1" in
+    --version)
+      [[ $# -ge 2 ]] || { usage >&2; exit 64; }
+      VERSION="$2"
+      shift 2
+      ;;
+    --foreground)
+      FOREGROUND=1
+      shift
+      ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
+    --)
+      shift
+      PASSTHROUGH=("$@")
+      break
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      PASSTHROUGH+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "$VERSION" ]]; then
+  [[ "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+    echo "Invalid release version: $VERSION" >&2
+    exit 64
+  }
+  RELEASE="$RELEASES_DIR/$VERSION"
+else
+  [[ -L "$CURRENT_LINK" ]] || {
+    echo "No project production release is active: $CURRENT_LINK" >&2
+    exit 69
+  }
+  RELEASE="$(readlink -f "$CURRENT_LINK")"
+  VERSION="$(basename "$RELEASE")"
+fi
+
+RELEASE="$(readlink -f "$RELEASE")"
+case "$RELEASE" in
+  "$RELEASES_DIR"/*) ;;
+  *)
+    echo "Release resolves outside the project release directory: $RELEASE" >&2
+    exit 69
+    ;;
+esac
+
+METADATA="$RELEASE/.rogue-release.json"
+[[ -f "$METADATA" ]] || { echo "Release metadata is missing: $METADATA" >&2; exit 69; }
+[[ -x "$RELEASE/.venv/bin/python" ]] || { echo "Release Python is missing" >&2; exit 69; }
+git -C "$RELEASE" diff --quiet --ignore-submodules -- || {
+  echo "Refusing to run modified release source: $RELEASE" >&2
+  exit 70
+}
+UV_CACHE_DIR="$RUNTIME_ROOT/uv-cache" uv sync \
+  --project "$RELEASE" \
+  --frozen \
+  --no-dev \
+  --check \
+  --python "$RELEASE/.venv/bin/python" \
+  >/dev/null
+
+ENTRYPOINT="$(sed -n 's/^[[:space:]]*"entrypoint": "\([^"]*\)",\{0,1\}$/\1/p' "$METADATA")"
+[[ "$ENTRYPOINT" =~ ^my_scripts/[A-Za-z0-9._-]+\.py$ ]] || {
+  echo "Invalid release entrypoint metadata: $ENTRYPOINT" >&2
+  exit 69
+}
+[[ -f "$RELEASE/$ENTRYPOINT" ]] || { echo "Release entrypoint is missing: $ENTRYPOINT" >&2; exit 69; }
+
+COMMIT="$(git -C "$RELEASE" rev-parse --short=12 HEAD)"
+if ((CHECK_ONLY)); then
+  echo "mode=production version=$VERSION commit=$COMMIT entrypoint=$ENTRYPOINT status=ready"
+  exit 0
+fi
+
+export ROGUETRADER_RUNTIME_MODE="production"
+export ROGUETRADER_RELEASE_VERSION="$VERSION"
+export ROGUETRADER_RELEASE_COMMIT="$COMMIT"
+export PYTHONDONTWRITEBYTECODE=1
+mkdir -p "$(dirname "$LOCK_FILE")"
+cd "$RELEASE"
+COMMAND=("$RELEASE/.venv/bin/python" "$RELEASE/$ENTRYPOINT" "${PASSTHROUGH[@]}")
+
+if ((FOREGROUND)); then
+  exec flock -n "$LOCK_FILE" "${COMMAND[@]}"
+fi
+"${COMMAND[@]}"
