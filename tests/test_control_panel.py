@@ -38,6 +38,7 @@ class ConfigStoreTests(unittest.TestCase):
             config = ConfigStore(path).load()
 
             self.assertFalse(config.enabled)
+            self.assertFalse(config.execution_plan_enabled)
             self.assertEqual(config.daily_time, "05:00")
             self.assertEqual(config.enabled_symbols, ("BTC-USD",))
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
@@ -47,11 +48,13 @@ class ConfigStoreTests(unittest.TestCase):
             store = ConfigStore(Path(directory) / "config.json")
 
             store.set_schedule(enabled=True, daily_time="07:35")
+            store.set_execution_plan_enabled(True)
             store.add_ticker("eth-usd")
             store.set_ticker_enabled("BTC-USD", False)
             config = store.load()
 
             self.assertTrue(config.enabled)
+            self.assertTrue(config.execution_plan_enabled)
             self.assertEqual(config.daily_time, "07:35")
             self.assertEqual(config.enabled_symbols, ("ETH-USD",))
 
@@ -114,12 +117,17 @@ class SchedulerTests(unittest.TestCase):
             scheduler._run_batch(
                 ("BTC-USD", "ETH-USD"),
                 datetime(2026, 9, 9, 5, 0, tzinfo=SHANGHAI),
+                True,
             )
 
             records = history.load()
             self.assertEqual({record["symbol"] for record in records}, {"BTC-USD", "ETH-USD"})
             self.assertTrue(all(record["status"] == "ok" for record in records))
+            self.assertTrue(all(record["execution_plan_enabled"] for record in records))
             self.assertTrue(all(Path(record["log_path"]).is_file() for record in records))
+            for record in records:
+                log = Path(record["log_path"]).read_text(encoding="utf-8")
+                self.assertIn("scheduled", log)
 
 
 class ControlPanelApiTests(unittest.TestCase):
@@ -167,11 +175,13 @@ class ControlPanelApiTests(unittest.TestCase):
         self.assertEqual(snapshot["publisher"], {"service_running": False})
 
         self.request("/api/schedule", "POST", {"enabled": True, "daily_time": "06:45"})
+        self.request("/api/execution-plan", "POST", {"enabled": True})
         self.request("/api/tickers", "POST", {"symbol": "eth-usd"})
         self.request("/api/tickers/BTC-USD", "PATCH", {"enabled": False})
         _, snapshot = self.request("/api/status")
 
         self.assertTrue(snapshot["config"]["enabled"])
+        self.assertTrue(snapshot["config"]["execution_plan_enabled"])
         self.assertEqual(snapshot["config"]["daily_time"], "06:45")
         self.assertEqual(
             [item for item in snapshot["config"]["tickers"] if item["enabled"]],

@@ -47,8 +47,16 @@ from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
 from roguetrader.output_paths import make_run_output_paths
-from roguetrader.run_outputs import state_snapshot, write_run_outputs
+from roguetrader.run_outputs import (
+    state_snapshot,
+    write_run_manifest,
+    write_run_outputs,
+)
 from roguetrader.llm_clients.agent_registry import AgentLLMRegistry
+from roguetrader.execution.planner import (
+    ExecutionPlanner,
+    find_previous_execution_plan,
+)
 
 
 class _TeeStream:
@@ -155,6 +163,14 @@ class RogueTraderGraph:
             self.agent_registry.get_llm("signal_processor", "quick"),
             self.agent_registry,
         )
+        self.execution_planner = (
+            ExecutionPlanner(
+                self.agent_registry.get_llm("execution_planner", "quick"),
+                self.agent_registry,
+            )
+            if bool(self.config.get("execution_plan_enabled", False))
+            else None
+        )
 
         # State tracking
         self.curr_state = None
@@ -237,11 +253,39 @@ class RogueTraderGraph:
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
-        self.current_output_paths = make_run_output_paths(
-            self.config.get("results_dir", "my_results"),
+        run_context = self.config.get("run_context", {})
+        if not isinstance(run_context, dict):
+            run_context = {}
+        while True:
+            self.current_output_paths = make_run_output_paths(
+                self.config.get("results_dir", "my_results"),
+                company_name,
+                analysis_date=str(trade_date),
+                runtime_mode=run_context.get("runtime_mode"),
+                trigger=run_context.get("trigger"),
+                scheduled_for=run_context.get("scheduled_for"),
+                parent_run_id=run_context.get("parent_run_id"),
+            )
+            try:
+                self.current_output_paths.root.mkdir(parents=True, exist_ok=False)
+                break
+            except FileExistsError:
+                continue
+        write_run_manifest(
+            self.current_output_paths,
             company_name,
+            status="running",
         )
-        self.current_output_paths.root.mkdir(parents=True, exist_ok=True)
+        previous_execution_plan = None
+        if self.execution_planner is not None:
+            identity = self.current_output_paths.identity
+            previous_execution_plan = find_previous_execution_plan(
+                self.config.get("results_dir", "my_results"),
+                ticker=company_name,
+                analysis_date=str(trade_date),
+                runtime_mode=(identity.runtime_mode if identity else None),
+                exclude_run_dir=self.current_output_paths.root,
+            )
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
@@ -284,24 +328,87 @@ class RogueTraderGraph:
                     decision = self.process_signal(final_state["final_trade_decision"])
                     print(f"\nRogueTrader final decision: {decision}")
 
+                    execution_plan_draft = None
+                    execution_plan_error_type = None
+                    if self.execution_planner is not None:
+                        try:
+                            execution_plan_draft = self.execution_planner.create_draft(
+                                ticker=company_name,
+                                analysis_date=str(trade_date),
+                                action=decision,
+                                final_decision_text=str(
+                                    final_state["final_trade_decision"]
+                                ),
+                                previous_plan=previous_execution_plan,
+                            )
+                            print("Parameterized paper execution plan created.")
+                        except Exception as exc:
+                            execution_plan_error_type = type(exc).__name__
+                            print(
+                                "Execution plan unavailable; preserving the completed "
+                                f"research result ({execution_plan_error_type})."
+                            )
+
                     # Log state and normalized run outputs
-                    self._log_state(trade_date, final_state, decision)
-                except Exception:
+                    self._log_state(
+                        trade_date,
+                        final_state,
+                        decision,
+                        execution_plan_requested=self.execution_planner is not None,
+                        execution_plan_draft=execution_plan_draft,
+                        execution_plan_error_type=execution_plan_error_type,
+                    )
+                except Exception as exc:
                     traceback.print_exc()
                     if final_state is not None:
                         self._log_state(trade_date, final_state, "INCOMPLETE")
+                        write_run_manifest(
+                            self.current_output_paths,
+                            company_name,
+                            status="incomplete",
+                            error_type=type(exc).__name__,
+                        )
                         print(f"Partial outputs written to: {self.current_output_paths.root}")
+                    else:
+                        write_run_manifest(
+                            self.current_output_paths,
+                            company_name,
+                            status="failed",
+                            error_type=type(exc).__name__,
+                        )
                     raise
                 except KeyboardInterrupt:
                     print("\nRogueTrader run interrupted by user.")
                     if final_state is not None:
                         self._log_state(trade_date, final_state, "INCOMPLETE")
+                        write_run_manifest(
+                            self.current_output_paths,
+                            company_name,
+                            status="incomplete",
+                            error_type="KeyboardInterrupt",
+                        )
                         print(f"Partial outputs written to: {self.current_output_paths.root}")
+                    else:
+                        write_run_manifest(
+                            self.current_output_paths,
+                            company_name,
+                            status="interrupted",
+                            error_type="KeyboardInterrupt",
+                        )
                     raise
 
         return final_state, decision
 
-    def _log_state(self, trade_date, final_state, decision=None):
+    def _log_state(
+        self,
+        trade_date,
+        final_state,
+        decision=None,
+        *,
+        execution_plan_requested=False,
+        execution_plan_draft=None,
+        execution_plan_error_type=None,
+    ):
         """Log the final state to a JSON file."""
         snapshot = state_snapshot(final_state)
         self.log_states_dict[str(trade_date)] = snapshot
@@ -320,6 +427,9 @@ class RogueTraderGraph:
             decision=decision or self.process_signal(final_state["final_trade_decision"]),
             config=self.config,
             selected_analysts=self.selected_analysts,
+            execution_plan_requested=execution_plan_requested,
+            execution_plan_draft=execution_plan_draft,
+            execution_plan_error_type=execution_plan_error_type,
         )
 
     def reflect_and_remember(self, returns_losses):

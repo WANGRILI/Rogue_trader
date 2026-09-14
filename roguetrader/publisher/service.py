@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
+import json
 import logging
 from pathlib import Path
 import threading
@@ -18,6 +19,21 @@ from roguetrader.publisher.state import PublicationState
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def manifest_marks_unpublishable(run_dir: Path) -> bool:
+    path = run_dir / "运行清单.json"
+    if not path.is_file():
+        return False
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(value, dict) and value.get("status") != "completed"
+
+
+def _is_auto_publishable(record: DecisionRecord) -> bool:
+    return record.publication_role in {"eligible", "official"}
 
 
 @dataclass(frozen=True)
@@ -90,9 +106,19 @@ class LocalPublisher:
         self.downstream_sinks = self.sinks[1:]
         self.clock = clock or (lambda: datetime.now().astimezone())
 
-    def publish_run(self, run_dir: str | Path) -> PublicationResult:
+    def publish_run(
+        self, run_dir: str | Path, *, promote: bool = False
+    ) -> PublicationResult:
         record = load_completed_run(run_dir)
-        self.state.register_event(record, run_dir, "publish")
+        initial_disposition = "publish" if _is_auto_publishable(record) else "candidate"
+        self.state.register_event(record, run_dir, initial_disposition)
+        if promote:
+            self.state.promote_official(record)
+        elif not _is_auto_publishable(record):
+            raise PublicationError("候选结果不会自动发布；请显式提升为正式结果。")
+        elif not self.state.claim_official(record):
+            self.state.set_disposition(record.event_id, "candidate")
+            raise PublicationError("该分析日期和标的已经存在正式结果。")
         self.state.set_disposition(record.event_id, "publish")
         return self._deliver(record)
 
@@ -104,6 +130,8 @@ class LocalPublisher:
         run_dirs = completed_run_directories(results_root)
         self._record_baseline_manifest(results_root, run_dirs)
         for run_dir in run_dirs:
+            if manifest_marks_unpublishable(run_dir):
+                continue
             try:
                 record = load_completed_run(run_dir)
             except PublicationError as exc:
@@ -150,15 +178,27 @@ class LocalPublisher:
         errors: list[dict[str, str]] = []
         processed_event_ids: set[str] = set()
         for run_dir in completed_run_directories(results_root):
+            if manifest_marks_unpublishable(run_dir):
+                continue
             try:
                 record = load_completed_run(run_dir)
                 disposition = self.state.disposition(record.event_id)
                 if disposition is None:
-                    self.state.register_event(record, run_dir, "publish")
-                    disposition = "publish"
+                    requested = (
+                        "publish" if _is_auto_publishable(record) else "candidate"
+                    )
+                    self.state.register_event(record, run_dir, requested)
+                    disposition = requested
                 elif disposition == "baseline" and backfill:
-                    self.state.set_disposition(record.event_id, "publish")
-                    disposition = "publish"
+                    disposition = (
+                        "publish" if _is_auto_publishable(record) else "candidate"
+                    )
+                    self.state.set_disposition(record.event_id, disposition)
+                if disposition == "candidate":
+                    continue
+                if disposition == "publish" and not self.state.claim_official(record):
+                    self.state.set_disposition(record.event_id, "candidate")
+                    continue
                 if disposition != "publish":
                     continue
                 processed_event_ids.add(record.event_id)

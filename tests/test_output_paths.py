@@ -8,9 +8,10 @@ from roguetrader.output_paths import (
     graph_state_log_path,
     make_evaluation_output_paths,
     make_run_output_paths,
+    parse_run_directory_name,
     safe_symbol,
 )
-from roguetrader.run_outputs import write_run_outputs
+from roguetrader.run_outputs import write_run_manifest, write_run_outputs
 
 
 class OutputPathTests(unittest.TestCase):
@@ -29,6 +30,8 @@ class OutputPathTests(unittest.TestCase):
         self.assertEqual(run_paths.state_path.name, "状态.json")
         self.assertEqual(run_paths.index_path.name, "运行索引.json")
         self.assertEqual(run_paths.decision_path.name, "最终决策.json")
+        self.assertEqual(run_paths.execution_plan_path.name, "执行计划.json")
+        self.assertEqual(run_paths.execution_instance_path.name, "执行实例.json")
         self.assertEqual(run_paths.config_path.name, "运行配置.json")
         self.assertEqual(run_paths.log_path.name, "终端日志.log")
         self.assertEqual(run_paths.section_dir.name, "分段报告")
@@ -44,6 +47,31 @@ class OutputPathTests(unittest.TestCase):
             graph_state_log_path(root, "BTC-USD", "2026-05-19"),
             root / "图状态日志" / "BTC_USD" / "完整状态_2026-05-19.json",
         )
+
+    def test_v2_run_name_keeps_start_and_analysis_dates_separate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = make_run_output_paths(
+                tmp,
+                "BTC-USD",
+                "20260913_115207",
+                analysis_date="2026-09-13",
+                runtime_mode="production",
+                trigger="recovery",
+                scheduled_for="2026-09-13T05:00:00+08:00",
+            )
+            self.assertEqual(
+                paths.root.name,
+                "20260913_115207__asof-20260913__prod__recovery-a01__BTC_USD",
+            )
+            parsed = parse_run_directory_name(paths.root.name)
+            self.assertEqual(parsed["analysis_date"], "2026-09-13")
+            self.assertEqual(parsed["runtime_mode"], "prod")
+            self.assertEqual(parsed["trigger"], "recovery")
+            self.assertEqual(parsed["attempt"], 1)
+            paths.root.mkdir(parents=True)
+            manifest = write_run_manifest(paths, "BTC-USD", status="running")
+            self.assertEqual(manifest["scheduled_for"], "2026-09-13T05:00:00+08:00")
+            self.assertEqual(manifest["publication_role"], "eligible")
 
     def test_cli_report_save_uses_chinese_file_names(self):
         final_state = {
@@ -113,13 +141,14 @@ class OutputPathTests(unittest.TestCase):
             self.assertTrue((paths.section_dir / "链上分析.md").exists())
 
             decision = json.loads(paths.decision_path.read_text(encoding="utf-8"))
-            self.assertEqual(decision["schema_version"], "1.0")
+            self.assertEqual(decision["schema_version"], "2.0")
             self.assertEqual(decision["action"], "HOLD")
             self.assertIsNone(decision["confidence"])
             self.assertIn("final_trade_decision_text", decision)
 
             index = json.loads(paths.index_path.read_text(encoding="utf-8"))
             self.assertEqual(index["files"]["decision"], "最终决策.json")
+            self.assertEqual(index["execution_plan"]["status"], "disabled")
             self.assertEqual(index["files"]["sections"]["market_report"], "分段报告/市场分析.md")
             self.assertNotIn("terminal_log", index["files"])
 

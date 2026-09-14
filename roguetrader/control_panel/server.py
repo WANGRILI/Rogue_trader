@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlparse
 
 from roguetrader.control_panel.models import ValidationError
 from roguetrader.control_panel.scheduler import ProjectScheduler
+from roguetrader.control_panel.health_monitor import DailyHealthMonitor
 from roguetrader.control_panel.storage import ConfigStore, RunHistoryStore
 from roguetrader.publisher.service import PublisherWatcher
 from roguetrader.publisher.feishu import (
@@ -44,6 +45,7 @@ class ControlPanelServer(ThreadingHTTPServer):
         publisher_watcher: PublisherWatcher | None = None,
         feishu_manager: FeishuNotificationManager | None = None,
         feishu_sheet_manager: FeishuSheetManager | None = None,
+        health_monitor: DailyHealthMonitor | None = None,
     ):
         super().__init__(address, ControlPanelHandler)
         self.config_store = config_store
@@ -53,6 +55,7 @@ class ControlPanelServer(ThreadingHTTPServer):
         self.publisher_watcher = publisher_watcher
         self.feishu_manager = feishu_manager
         self.feishu_sheet_manager = feishu_sheet_manager
+        self.health_monitor = health_monitor
 
 
 class ControlPanelHandler(BaseHTTPRequestHandler):
@@ -152,6 +155,11 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             "scheduler": self.server.scheduler.status(),
             "recent_runs": self.server.history_store.load()[:20],
             "publisher": publisher_status,
+            "health": (
+                self.server.health_monitor.status()
+                if self.server.health_monitor
+                else {"service_running": False, "state": "unavailable"}
+            ),
         }
 
     def _prepare_mutation(self) -> bool:
@@ -193,6 +201,14 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
                 config = self.server.config_store.set_schedule(
                     enabled=body.get("enabled"),
                     daily_time=body.get("daily_time"),
+                )
+            elif path == "/api/execution-plan":
+                if set(body) != {"enabled"} or not isinstance(
+                    body["enabled"], bool
+                ):
+                    raise ValidationError("执行计划开关请求无效。")
+                config = self.server.config_store.set_execution_plan_enabled(
+                    body["enabled"]
                 )
             elif path == "/api/tickers":
                 if set(body) != {"symbol"}:

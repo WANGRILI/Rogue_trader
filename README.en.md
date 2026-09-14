@@ -1,19 +1,43 @@
 # RogueTrader
 
 <p align="center">
-  <strong>Multi-agent market research, scheduled analysis, and structured result delivery</strong>
+  <strong>A multi-agent investment committee for research, adversarial reasoning, risk adjudication, and production delivery</strong>
 </p>
 
 <p align="center">
   <a href="README.md">中文</a> ·
   <a href="README.en.md">English</a> ·
-  <a href="docs/control-panel.md">Control panel</a> ·
-  <a href="docs/production-development.md">Operations</a>
+  <a href="ROADMAP.en.md">Roadmap</a> ·
+  <a href="docs/control-panel.en.md">Control panel</a> ·
+  <a href="docs/production-development.en.md">Operations</a>
 </p>
 
-RogueTrader combines a multi-agent investment-research pipeline with a project-owned production scheduler. It analyzes enabled symbols serially, produces structured decisions, persists each result to a local CSV, and then delivers the same record to Feishu channels.
+RogueTrader does not ask one model to guess where a market is going. It organizes investment decisions as a team of specialized agents that advances through multi-source research, cross-examination, trade construction, and final risk review. A project-owned scheduler and CSV-first delivery pipeline make this virtual investment committee repeatable, auditable, and production-ready.
 
 > This is a research system, not an automated execution engine or financial advice.
+
+## Agent team architecture
+
+The system orchestrates up to 14 specialized roles in a five-layer path from evidence gathering to executable expression:
+
+```text
+Intelligence
+  Market · Social · News · Fundamentals · On-chain analysts
+                         ↓ independent evidence
+Deliberation
+                 Bull researcher ↔ Bear researcher
+                         ↓ Research manager
+Strategy
+              Trader: direction · sizing · conditions
+                         ↓
+Risk Committee
+        Aggressive ↔ Neutral ↔ Conservative risk analysts
+                         ↓ Portfolio manager
+Execution
+       Non-voting planner: parameterized scenario orders
+```
+
+This is more than a linear agent chain. Research must pass a bull/bear debate and managerial ruling; the resulting strategy then faces a three-way risk debate and portfolio review. Once the rating is final, an independent execution-planning agent translates it into auditable instructions without voting or changing the decision.
 
 ![RogueTrader control panel — sanitized production preview](docs/assets/control-panel-production.png)
 
@@ -21,14 +45,25 @@ _Sanitized example state; it contains no credentials, personal paths, or generat
 
 ## Core capabilities
 
-- Multi-agent market, social, news, fundamentals, and on-chain research.
+- Configurable agent roster, per-role model tiers, and independent research/risk debate depth.
+- Two adversarial decision loops, each resolved by a dedicated manager role.
+- Optional multi-scenario, multi-order spot plans for paper simulation; live submission is always disabled.
 - Loopback-only control panel for schedule, time, and symbol management.
 - Sequential multi-symbol execution to avoid API and data-source contention.
 - CSV-first delivery with idempotent `event_id` records.
-- Independent Feishu group notification and spreadsheet channels.
+- A merged Feishu card with instructions first and the full decision second, plus an independent spreadsheet channel.
 - Channel-only retries that never rerun paid analysis.
 - Immutable tagged production releases with rollback support.
 - Isolated development and production code, state, caches, results, and secrets.
+
+## Evolution
+
+```text
+Foundation → Operations → Decision Integrity → Execution Intelligence → Validation Loop → Portfolio Intelligence
+   v1.0         v1.1             v1.2                  v1.3               Next               Horizon
+```
+
+The project is evolving from repeatable multi-agent research into measurable, feedback-driven investment intelligence. See the full [Evolution Roadmap](ROADMAP.en.md).
 
 ## Workflow
 
@@ -36,11 +71,15 @@ _Sanitized example state; it contains no credentials, personal paths, or generat
 Local control panel
   └── Asia/Shanghai daily scheduler
         └── sequential multi-symbol analysis
-              └── completion marker + structured decision
-                    └── daily CSV (source of truth)
-                          ├── local message package
-                          ├── Feishu group notification
-                          └── Feishu spreadsheet row
+              └── completed run
+                    ├── lifecycle manifest
+                    ├── completion marker + structured decision
+                    └── optional state-free execution plan
+                              ↓
+                    daily CSV (source of truth)
+                              ├── local message package
+                              ├── merged Feishu group card
+                              └── Feishu spreadsheet row
 ```
 
 The publisher consumes completed runs only. CSV, messaging, and spreadsheet delivery keep independent state, so a notification failure cannot affect the analysis task.
@@ -76,9 +115,12 @@ Production version status:
 
 ```text
 my_results/
-├── 运行结果/<timestamp>_<symbol>/
+├── 运行结果/20260913_115207__asof-20260913__prod__recovery-a02__BTC_USD/
+│   ├── 运行清单.json
 │   ├── 运行索引.json
 │   ├── 最终决策.json
+│   ├── 执行计划.json
+│   ├── 执行实例.json (optional after manual binding)
 │   ├── 报告.md
 │   ├── 状态.json
 │   └── 分段报告/
@@ -86,6 +128,8 @@ my_results/
     ├── 每日决策.csv
     └── 消息/
 ```
+
+The directory name separates actual start time, requested analysis date, runtime lane, trigger, attempt, and symbol. A lifecycle manifest exists even for failed runs; only successful runs receive `运行索引.json` and become publishable.
 
 Each symbol occupies one CSV row. Records are deduplicated by `event_id`; downstream channels consume the exact row reread from disk.
 
@@ -100,22 +144,6 @@ Each symbol occupies one CSV row. Records are deduplicated by `event_id`; downst
 | Results | Root `my_results/` | Worktree-local `my_results/` |
 
 Secrets, generated results, CSV files, SQLite state, and logs are Git-ignored. The control panel never returns credentials or full generated reports.
-
-## Analysis engine
-
-```text
-Analysts: market · social · news · fundamentals · on-chain
-        ↓
-Bull ↔ Bear researchers → Research manager
-        ↓
-Trader
-        ↓
-Aggressive ↔ Conservative ↔ Neutral risk → Portfolio manager
-        ↓
-BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL
-```
-
-The LangGraph-based engine supports DeepSeek, OpenAI, Anthropic, Google, xAI, OpenRouter, and local Ollama models.
 
 ## Development setup
 
@@ -132,13 +160,17 @@ Keep real credentials in the local `.env` only.
 
 ## Documentation
 
-- [Control panel](docs/control-panel.md)
-- [CSV-first local publisher](docs/local-publisher.md)
-- [Production and development modes](docs/production-development.md)
-- [Analysis engine](docs/analysis-engine.md)
-- [Models and data sources](docs/providers-and-data.md)
-- [Development and manual runs](docs/development.md)
-- [Changelog](CHANGELOG.md)
+- [Evolution roadmap](ROADMAP.en.md)
+- [Control panel](docs/control-panel.en.md)
+- [CSV-first local publisher](docs/local-publisher.en.md)
+- [Run-result protocol](docs/run-results.en.md)
+- [Production and development modes](docs/production-development.en.md)
+- [Parameterized execution plans](docs/execution-plans.en.md)
+- [Analysis engine](docs/analysis-engine.en.md)
+- [Models and data sources](docs/providers-and-data.en.md)
+- [Development and manual runs](docs/development.en.md)
+- [Daily health monitor](docs/daily-health-monitor.en.md)
+- [Changelog](CHANGELOG.en.md)
 
 ## Verification
 

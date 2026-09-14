@@ -57,6 +57,14 @@ class PublicationState:
                     PRIMARY KEY (event_id, sink),
                     FOREIGN KEY (event_id) REFERENCES events(event_id)
                 );
+                CREATE TABLE IF NOT EXISTS official_results (
+                    analysis_date TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (analysis_date, ticker),
+                    FOREIGN KEY (event_id) REFERENCES events(event_id)
+                );
                 """
             )
             columns = {
@@ -117,6 +125,78 @@ class PublicationState:
                 "UPDATE events SET disposition = ? WHERE event_id = ?",
                 (disposition, event_id),
             )
+
+    def update_event_location(
+        self, event_id: str, *, run_id: str, run_path: str | Path
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE events SET run_id = ?, run_path = ? WHERE event_id = ?",
+                (run_id, str(Path(run_path).resolve()), event_id),
+            )
+
+    def official_event(self, analysis_date: str, ticker: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT event_id FROM official_results "
+                "WHERE analysis_date = ? AND ticker = ?",
+                (analysis_date, ticker),
+            ).fetchone()
+        return str(row["event_id"]) if row else None
+
+    def claim_official(self, record: DecisionRecord) -> bool:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO official_results"
+                "(analysis_date, ticker, event_id, updated_at) VALUES(?, ?, ?, ?)",
+                (record.trade_date, record.ticker, record.event_id, now_iso()),
+            )
+            row = connection.execute(
+                "SELECT event_id FROM official_results "
+                "WHERE analysis_date = ? AND ticker = ?",
+                (record.trade_date, record.ticker),
+            ).fetchone()
+        return bool(row and str(row["event_id"]) == record.event_id)
+
+    def promote_official(self, record: DecisionRecord) -> str | None:
+        previous = self.official_event(record.trade_date, record.ticker)
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO official_results"
+                "(analysis_date, ticker, event_id, updated_at) VALUES(?, ?, ?, ?) "
+                "ON CONFLICT(analysis_date, ticker) DO UPDATE SET "
+                "event_id = excluded.event_id, updated_at = excluded.updated_at",
+                (record.trade_date, record.ticker, record.event_id, now_iso()),
+            )
+            if previous and previous != record.event_id:
+                connection.execute(
+                    "UPDATE events SET disposition = 'candidate' WHERE event_id = ?",
+                    (previous,),
+                )
+        return previous
+
+    def register_legacy_alias(
+        self,
+        event_id: str,
+        *,
+        run_id: str,
+        run_path: str | Path,
+    ) -> None:
+        timestamp = now_iso()
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO events"
+                "(event_id, run_id, run_path, disposition, discovered_at) "
+                "VALUES(?, ?, ?, 'baseline', ?)",
+                (event_id, run_id, str(Path(run_path).resolve()), timestamp),
+            )
+            for sink in ("csv", "local_message", "feishu", "feishu_sheet"):
+                connection.execute(
+                    "INSERT OR IGNORE INTO deliveries"
+                    "(event_id, sink, status, attempts, updated_at) "
+                    "VALUES(?, ?, 'skipped', 0, ?)",
+                    (event_id, sink, timestamp),
+                )
 
     def events_for_disposition(self, disposition: str) -> list[dict[str, str]]:
         with self._connect() as connection:

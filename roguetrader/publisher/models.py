@@ -64,6 +64,10 @@ class DecisionRecord:
     key_reasons: tuple[Any, ...]
     invalidations: tuple[Any, ...]
     decision_summary: str
+    runtime_mode: str = "legacy"
+    trigger: str = "unknown"
+    attempt: int = 1
+    publication_role: str = "eligible"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +89,10 @@ class DecisionRecord:
             "key_reasons": list(self.key_reasons),
             "invalidations": list(self.invalidations),
             "decision_summary": self.decision_summary,
+            "runtime_mode": self.runtime_mode,
+            "trigger": self.trigger,
+            "attempt": self.attempt,
+            "publication_role": self.publication_role,
         }
 
 
@@ -97,23 +105,32 @@ class PreparedMessage:
     fields: tuple[tuple[str, str], ...]
     run_id: str
     created_at: str
+    section_title: str = "决策摘要"
+    source_file: str = "最终决策.json"
+    sections: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": PUBLICATION_SCHEMA_VERSION,
             "event_id": self.event_id,
             "title": self.title,
             "level": self.level,
             "text": self.text,
+            "section_title": self.section_title,
             "fields": [
                 {"label": label, "value": value} for label, value in self.fields
             ],
             "source": {
                 "run_id": self.run_id,
-                "decision_file": "最终决策.json",
+                "decision_file": self.source_file,
             },
             "created_at": self.created_at,
         }
+        if self.sections:
+            payload["sections"] = [
+                {"title": title, "text": text} for title, text in self.sections
+            ]
+        return payload
 
 
 def render_message(record: DecisionRecord) -> PreparedMessage:

@@ -1,5 +1,7 @@
 # 开发与手动运行
 
+[中文](development.md) · [English](development.en.md)
+
 ## 前置条件
 
 - Python 3.10+
@@ -54,6 +56,7 @@ uv run --frozen python my_scripts/roguetrader0.py \
   --date 2026-09-12 \
   --analysts market,onchain \
   --max-debate-rounds 1 \
+  --execution-plan \
   --no-debug
 ```
 
@@ -66,8 +69,18 @@ uv run --frozen python my_scripts/roguetrader0.py \
 - `--max-debate-rounds`：多空辩论轮数；
 - `--max-recur-limit`：LangGraph 递归上限；
 - `--quick-model`、`--deep-model`：本次运行的模型覆盖。
+- `--execution-plan` / `--no-execution-plan`：开启或关闭可选的现货模拟执行计划。
 
 不要为了保存日志额外改脚本。标准运行目录已经包含 `终端日志.log`。
+
+参数化计划每天自动生成，数量使用 `X_POSITION` 和 `X_CASH` 表达，不需要人工输入。未来接入模拟器时，可选地用 3 个状态值换算为确定数量：
+
+```bash
+ops/bind-execution-plan <运行结果目录> \
+  --position-qty 1 --available-cash 10000 --last-price 100
+```
+
+该命令只生成模拟用的 `执行实例.json`，详见[参数化执行计划](execution-plans.md)。
 
 ## CLI
 
@@ -113,4 +126,7 @@ git diff --check
 | `my_scripts/roguetrader1.py` | 兼容已有调度调用的稳定入口 |
 | `roguetrader/control_panel/` | 本机控制面板和调度器 |
 | `roguetrader/publisher/` | CSV-first 发布与飞书通道 |
+| `roguetrader/execution/` | 执行计划协议、规划 Agent 与模拟绑定器 |
 | `ops/release_manager.py` | 不可变版本安装、激活和回滚 |
+
+每日健康审计见[每日任务健康审计](daily-health-monitor.md)。它使用模拟时钟和本地状态完成测试，不会在默认测试中调用模型或真实飞书接口。

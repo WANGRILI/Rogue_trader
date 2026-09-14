@@ -1,5 +1,7 @@
 # RogueTrader 生产/开发双模式
 
+[中文](production-development.md) · [English](production-development.en.md)
+
 ## 架构边界
 
 RogueTrader 自己负责调度、分析、结果发布和版本管理，不依赖外部调度系统。项目根目录是稳定控制面，开发代码位于独立 Git worktree，生产代码来自不可变版本：
@@ -55,11 +57,11 @@ ops/run-development --ticker BTC-USD --date 2026-09-09
 所有新功能在 `.runtime/development/worktree` 的 `develop` 分支开发。测试完成后创建新的生产标签和不可变环境：
 
 ```bash
-git tag -a production/v1.1.0 <candidate-commit> -m "RogueTrader production v1.1.0"
-./ops/release_manager.py install v1.1.0 production/v1.1.0
-./ops/release_manager.py verify v1.1.0 --import-check
-.runtime/bin/run-version --version v1.1.0 --check
-./ops/release_manager.py activate v1.1.0
+git tag -a production/<version> <candidate-commit> -m "RogueTrader production <version>"
+./ops/release_manager.py install <version> production/<version>
+./ops/release_manager.py verify <version> --import-check
+.runtime/bin/run-version --version <version> --check
+./ops/release_manager.py activate <version>
 ops/production-control-panel-service start
 ```
 

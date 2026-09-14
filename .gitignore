@@ -222,11 +222,24 @@ __marimo__/
 my_results/
 my_scripts/eval_results/
 
+# Private result history, import staging, and migration audit data
+# (kept explicit even though the top-level my_results/ rule already covers them)
+my_results/运行结果/
+my_results/汇总/
+my_results/历史日志/
+my_results/.imports/
+my_results/.migrations/
+
 # Local agent/session state
 .claw/
 
 # Local production/development runtime state and immutable releases
 .runtime/
+
+# Publisher databases, journals, and rollback backups
+# (kept explicit as a safeguard for future runtime-layout changes)
+.runtime/**/publisher/*.sqlite3*
+.runtime/**/publisher/backups/
 
 # Local memory database
 roguetrader/memory_db/*.sqlite3

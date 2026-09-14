@@ -13,6 +13,10 @@ from typing import TextIO
 from dotenv import load_dotenv
 
 from roguetrader.control_panel.scheduler import ProjectScheduler
+from roguetrader.control_panel.health_monitor import (
+    DailyHealthMonitor,
+    DailyHealthStateStore,
+)
 from roguetrader.control_panel.server import ControlPanelServer, LOOPBACK_HOSTS
 from roguetrader.control_panel.storage import ConfigStore, RunHistoryStore
 from roguetrader.publisher.service import LocalPublisher, PublisherWatcher
@@ -96,13 +100,24 @@ def main() -> None:
         sinks=(
             CsvDecisionSink(summary_dir / "每日决策.csv"),
             LocalMessageSink(summary_dir / "消息"),
-            FeishuWebhookSink(feishu_manager),
+            FeishuWebhookSink(feishu_manager, PROJECT_ROOT / "my_results"),
             FeishuSheetSink(feishu_sheet_manager),
         ),
     )
     publisher_watcher = PublisherWatcher(
         publisher=publisher,
         results_root=PROJECT_ROOT / "my_results",
+    )
+    health_monitor = DailyHealthMonitor(
+        config_store=config_store,
+        history_store=history_store,
+        scheduler=scheduler,
+        publisher_watcher=publisher_watcher,
+        publication_state=publication_state,
+        feishu_manager=feishu_manager,
+        feishu_sheet_manager=feishu_sheet_manager,
+        results_root=PROJECT_ROOT / "my_results",
+        state_store=DailyHealthStateStore(state_dir / "daily-health.json"),
     )
     server = ControlPanelServer(
         (args.host, args.port),
@@ -113,10 +128,12 @@ def main() -> None:
         publisher_watcher=publisher_watcher,
         feishu_manager=feishu_manager,
         feishu_sheet_manager=feishu_sheet_manager,
+        health_monitor=health_monitor,
     )
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     scheduler.start()
     publisher_watcher.start()
+    health_monitor.start()
     host, port = server.server_address[:2]
     print(f"RogueTrader 控制面板：http://{host}:{port}")
     print(f"配置目录：{state_dir}")
@@ -130,6 +147,7 @@ def main() -> None:
     finally:
         server.shutdown()
         server.server_close()
+        health_monitor.stop()
         publisher_watcher.stop()
         scheduler.stop()
         signal.signal(signal.SIGTERM, previous_sigterm_handler)

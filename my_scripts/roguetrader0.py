@@ -7,6 +7,7 @@ entrypoint is intentionally kept in roguetrader1.py.
 
 import argparse
 import datetime
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,6 +20,13 @@ from roguetrader.graph.trading_graph import RogueTraderGraph  # noqa: E402
 
 
 DEFAULT_ANALYSTS = "market,social,news,fundamentals,onchain"
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def parse_analysts(value: str) -> list[str]:
@@ -48,6 +56,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", default="deepseek")
     parser.add_argument("--backend-url", default="https://api.deepseek.com")
     parser.add_argument(
+        "--execution-plan",
+        action=argparse.BooleanOptionalAction,
+        default=env_flag("ROGUETRADER_EXECUTION_PLAN_ENABLED"),
+        help="Generate a parameterized spot paper-execution plan.",
+    )
+    parser.add_argument(
+        "--run-mode",
+        choices=("production", "development", "prod", "dev"),
+        default=os.getenv("ROGUETRADER_RUNTIME_MODE", "development"),
+        help="Runtime lane recorded in the run manifest.",
+    )
+    parser.add_argument(
+        "--trigger",
+        choices=("scheduled", "recovery", "manual"),
+        default=os.getenv("ROGUETRADER_RUN_TRIGGER", "manual"),
+        help="Reason this run was started.",
+    )
+    parser.add_argument(
+        "--scheduled-for",
+        default=os.getenv("ROGUETRADER_SCHEDULED_FOR"),
+        help="Original scheduled timestamp, when applicable.",
+    )
+    parser.add_argument(
+        "--parent-run-id",
+        default=os.getenv("ROGUETRADER_PARENT_RUN_ID"),
+        help="Failed or superseded run that led to this recovery run.",
+    )
+    parser.add_argument(
         "--no-debug",
         action="store_true",
         help="Disable LangGraph debug streaming.",
@@ -68,6 +104,13 @@ def main() -> None:
     config["max_debate_rounds"] = args.max_debate_rounds
     config["max_risk_discuss_rounds"] = args.max_risk_discuss_rounds
     config["max_recur_limit"] = args.max_recur_limit
+    config["execution_plan_enabled"] = args.execution_plan
+    config["run_context"] = {
+        "runtime_mode": args.run_mode,
+        "trigger": args.trigger,
+        "scheduled_for": args.scheduled_for,
+        "parent_run_id": args.parent_run_id,
+    }
 
     selected_analysts = parse_analysts(args.analysts)
     rt = RogueTraderGraph(

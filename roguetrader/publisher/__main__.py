@@ -41,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     publish = subparsers.add_parser("publish", help="发布一个已完成结果")
     publish.add_argument("run_dir", type=Path)
+    publish.add_argument(
+        "--promote",
+        action="store_true",
+        help="将候选结果显式提升为该分析日期和标的的正式结果",
+    )
     mode = publish.add_mutually_exclusive_group()
     mode.add_argument("--csv-only", action="store_true")
     mode.add_argument("--message-only", action="store_true")
@@ -143,7 +148,9 @@ def main() -> None:
             state,
             (
                 CsvDecisionSink(results_root / "汇总" / "每日决策.csv"),
-                FeishuWebhookSink(manager, automatic=False),
+                FeishuWebhookSink(
+                    manager, results_root, automatic=False
+                ),
             ),
         ).publish_run(args.run_dir).to_dict()
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -196,7 +203,9 @@ def main() -> None:
 
     publisher = make_publisher(args)
     if args.command == "publish":
-        report = publisher.publish_run(args.run_dir).to_dict()
+        report = publisher.publish_run(
+            args.run_dir, promote=getattr(args, "promote", False)
+        ).to_dict()
     else:
         report = publisher.scan(args.results_root, backfill=args.backfill)
     print(json.dumps(report, ensure_ascii=False, indent=2))

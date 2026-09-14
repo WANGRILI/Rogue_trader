@@ -87,6 +87,35 @@ class LoaderTests(unittest.TestCase):
             self.assertEqual(message.level, "positive")
             self.assertIn("分批买入", message.text)
 
+    def test_frozen_event_identity_survives_physical_directory_rename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = make_completed_run(root, "20260913_115207_BTC_USD")
+            event_id = load_completed_run(original).event_id
+            (original / "运行清单.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "runtime_mode": "prod",
+                        "trigger": "recovery",
+                        "attempt": 2,
+                        "status": "completed",
+                        "publication_role": "official",
+                        "publication_event_id": event_id,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            renamed = original.with_name(
+                "20260913_115207__asof-20260913__prod__recovery-a02__BTC_USD"
+            )
+            original.rename(renamed)
+
+            record = load_completed_run(renamed)
+            self.assertEqual(record.event_id, event_id)
+            self.assertEqual(record.trigger, "recovery")
+            self.assertEqual(record.attempt, 2)
+
     def test_message_preserves_complete_multiline_decision_within_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             decision_text = (
@@ -160,6 +189,23 @@ class SinkAndStateTests(unittest.TestCase):
             )
             self.assertEqual(csv_path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(message_path.stat().st_mode & 0o777, 0o600)
+
+    def test_one_official_result_per_analysis_date_and_ticker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first_run = make_completed_run(root, "run-first")
+            second_run = make_completed_run(root, "run-second")
+            publisher = LocalPublisher(
+                PublicationState(root / "publisher.sqlite3"),
+                (CsvDecisionSink(root / "decisions.csv"),),
+            )
+
+            publisher.publish_run(first_run)
+            with self.assertRaises(PublicationError):
+                publisher.publish_run(second_run)
+
+            promoted = publisher.publish_run(second_run, promote=True)
+            self.assertTrue(promoted.successful)
 
     def test_csv_neutralizes_formula_prefixes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -350,6 +396,35 @@ class ScanTests(unittest.TestCase):
             self.assertEqual([item["run_id"] for item in attempted], [old_run.name])
             with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
                 self.assertEqual(len(list(csv.DictReader(handle))), 2)
+
+    def test_backfill_does_not_promote_candidate_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = make_completed_run(root, "run-candidate")
+            (candidate / "运行清单.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "status": "completed",
+                        "runtime_mode": "dev",
+                        "trigger": "manual",
+                        "attempt": 1,
+                        "publication_role": "candidate",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            csv_path = root / "汇总" / "每日决策.csv"
+            publisher = LocalPublisher(
+                PublicationState(root / ".runtime" / "publisher.sqlite3"),
+                (CsvDecisionSink(csv_path),),
+            )
+
+            publisher.scan(root)
+            report = publisher.scan(root, backfill=True)
+
+            self.assertEqual(report["published"], [])
+            self.assertFalse(csv_path.exists())
 
     def test_watcher_publishes_a_result_created_after_baseline(self):
         with tempfile.TemporaryDirectory() as directory:

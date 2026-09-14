@@ -44,6 +44,11 @@ DEFAULT_CONFIG = {
     # 分析师报告和最终决策的输出语言
     # 注意：内部代理辩论保持英文以保证推理质量
     "output_language": "English",
+    # 额外生成参数化现货模拟执行计划；不会提交真实委托
+    "execution_plan_enabled": os.getenv(
+        "ROGUETRADER_EXECUTION_PLAN_ENABLED", "0"
+    ).strip().lower()
+    in {"1", "true", "yes", "on"},
 
     # ==================== 辩论和讨论配置 ====================
     "max_debate_rounds": 1,  # 投资辩论轮数（多头vs空头）

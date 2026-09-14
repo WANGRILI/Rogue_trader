@@ -78,6 +78,7 @@ class ScheduleConfig:
     daily_time: str
     timezone: str
     tickers: tuple[TickerConfig, ...]
+    execution_plan_enabled: bool
     revision: int
     updated_at: str
 
@@ -88,6 +89,7 @@ class ScheduleConfig:
             daily_time="05:00",
             timezone=DEFAULT_TIMEZONE,
             tickers=(TickerConfig("BTC-USD"),),
+            execution_plan_enabled=False,
             revision=1,
             updated_at=now_iso(),
         )
@@ -111,11 +113,15 @@ class ScheduleConfig:
         revision = value.get("revision", 1)
         if not isinstance(revision, int) or revision < 1:
             raise ValidationError("配置修订号无效。")
+        execution_plan_enabled = value.get("execution_plan_enabled", False)
+        if not isinstance(execution_plan_enabled, bool):
+            raise ValidationError("执行计划开关必须是布尔值。")
         return cls(
             enabled=enabled,
             daily_time=validate_daily_time(value.get("daily_time", "05:00")),
             timezone=validate_timezone(value.get("timezone", DEFAULT_TIMEZONE)),
             tickers=tickers,
+            execution_plan_enabled=execution_plan_enabled,
             revision=revision,
             updated_at=str(value.get("updated_at", now_iso())),
         )
@@ -127,6 +133,7 @@ class ScheduleConfig:
             "daily_time": self.daily_time,
             "timezone": self.timezone,
             "tickers": [ticker.to_dict() for ticker in self.tickers],
+            "execution_plan_enabled": self.execution_plan_enabled,
             "revision": self.revision,
             "updated_at": self.updated_at,
         }

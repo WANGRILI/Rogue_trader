@@ -18,6 +18,7 @@ from roguetrader.publisher.models import (
 MAX_METADATA_BYTES = 2 * 1024 * 1024
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ACTION_RE = re.compile(r"^[A-Z][A-Z0-9_-]{0,31}$")
+EVENT_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -48,6 +49,8 @@ def load_completed_run(run_dir: str | Path) -> DecisionRecord:
 
     index = _load_json(root / "运行索引.json")
     decision = _load_json(root / "最终决策.json")
+    manifest_path = root / "运行清单.json"
+    manifest = _load_json(manifest_path) if manifest_path.is_file() else {}
 
     ticker = _required_string(decision, "ticker", "标的")
     trade_date = _required_string(decision, "trade_date", "分析日期")
@@ -86,7 +89,21 @@ def load_completed_run(run_dir: str | Path) -> DecisionRecord:
         raise PublicationError("理由和失效条件必须是数组。")
 
     run_id = root.name
-    event_id = stable_event_id(run_id, decision)
+    frozen_event_id = manifest.get("publication_event_id") or index.get(
+        "publication_event_id"
+    )
+    if frozen_event_id is not None and (
+        not isinstance(frozen_event_id, str)
+        or not EVENT_ID_RE.fullmatch(frozen_event_id)
+    ):
+        raise PublicationError("运行清单中的发布事件身份格式无效。")
+    event_id = frozen_event_id or stable_event_id(run_id, decision)
+    runtime_mode = str(manifest.get("runtime_mode") or "legacy")
+    trigger = str(manifest.get("trigger") or "unknown")
+    publication_role = str(manifest.get("publication_role") or "eligible")
+    attempt = manifest.get("attempt", 1)
+    if not isinstance(attempt, int) or attempt < 1:
+        raise PublicationError("运行清单中的尝试次数无效。")
     return DecisionRecord(
         event_id=event_id,
         run_id=run_id,
@@ -105,4 +122,8 @@ def load_completed_run(run_dir: str | Path) -> DecisionRecord:
         key_reasons=tuple(key_reasons),
         invalidations=tuple(invalidations),
         decision_summary=compact_text(final_text),
+        runtime_mode=runtime_mode,
+        trigger=trigger,
+        attempt=attempt,
+        publication_role=publication_role,
     )

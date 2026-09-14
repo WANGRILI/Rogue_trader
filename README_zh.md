@@ -1,4 +1,4 @@
-# RogueTrader 中文说明
+# RogueTrader 中文说明 / Chinese Documentation
 
 中文内容现在直接作为仓库主首页维护，请阅读 [README.md](README.md)。
 

@@ -19,6 +19,11 @@ from urllib.request import Request, urlopen
 import uuid
 
 from roguetrader.publisher.models import DecisionRecord, PreparedMessage, render_message
+from roguetrader.publisher.execution_plan_message import (
+    load_execution_plan,
+    merge_execution_and_decision_message,
+    render_execution_plan_message,
+)
 from roguetrader.publisher.state import PublicationState
 
 
@@ -120,6 +125,25 @@ def render_feishu_card(message: PreparedMessage) -> dict[str, Any]:
         }
         for label, value in message.fields
     ]
+    content_sections = message.sections or (
+        (message.section_title, message.text),
+    )
+    content_elements: list[dict[str, Any]] = []
+    for position, (title, section_text) in enumerate(content_sections):
+        if position:
+            content_elements.append({"tag": "hr"})
+        content_elements.append(
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": (
+                        f"**{_escape_markdown(title)}**\n"
+                        f"{_escape_markdown(section_text)}"
+                    ),
+                },
+            }
+        )
     return {
         "config": {"wide_screen_mode": True},
         "header": {
@@ -129,13 +153,7 @@ def render_feishu_card(message: PreparedMessage) -> dict[str, Any]:
         "elements": [
             {"tag": "div", "fields": fields},
             {"tag": "hr"},
-            {
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": f"**决策摘要**\n{_escape_markdown(message.text)}",
-                },
-            },
+            *content_elements,
             {
                 "tag": "note",
                 "elements": [
@@ -338,6 +356,54 @@ class FeishuNotificationManager:
         )
         return timestamp
 
+    def send_operational_alert(
+        self,
+        *,
+        alert_id: str,
+        trade_date: str,
+        scheduled_for: str,
+        checked_at: str,
+        issues: tuple[dict[str, Any], ...],
+        checks_completed: int,
+    ) -> str:
+        """Send one secret-safe daily health alert to the configured group."""
+        if not self.is_enabled():
+            raise FeishuConfigurationError("飞书群通知未开启。")
+        if not self.is_ready():
+            raise FeishuConfigurationError("飞书群通知配置尚未通过测试。")
+        lines = []
+        for issue in issues[:20]:
+            symbol = str(issue.get("symbol") or "系统")
+            label = str(issue.get("label") or "未知异常")
+            detail = str(issue.get("detail") or "").strip()
+            lines.append(f"- {symbol}：{label}" + (f"（{detail}）" if detail else ""))
+        if len(issues) > 20:
+            lines.append(f"- 另有 {len(issues) - 20} 项异常，请查看本机控制面板。")
+        text = (
+            "每日任务经过首次检查和三次复查后仍未恢复。\n"
+            + "\n".join(lines)
+            + "\n\n系统没有自动重跑付费分析。"
+        )
+        message = PreparedMessage(
+            event_id=alert_id,
+            title="RogueTrader 每日任务失败告警",
+            level="negative",
+            text=text,
+            fields=(
+                ("分析日期", trade_date),
+                ("计划时间", scheduled_for),
+                ("最终检查", checked_at),
+                ("检查次数", f"{checks_completed}（首次 + 3 次复查）"),
+            ),
+            run_id=f"daily-health-{trade_date}",
+            created_at=checked_at,
+            section_title="失败摘要",
+        )
+        FeishuWebhookClient(
+            self.credentials(), opener=self.opener, clock=self.clock
+        ).send(message)
+        return self.clock().isoformat(timespec="seconds")
+
     def set_enabled(self, enabled: bool) -> FeishuNotificationSettings:
         if not isinstance(enabled, bool):
             raise FeishuConfigurationError("飞书通知开关必须是布尔值。")
@@ -393,10 +459,14 @@ class FeishuWebhookSink:
     def __init__(
         self,
         manager: FeishuNotificationManager,
+        results_root: str | Path | None = None,
         *,
         automatic: bool = True,
     ):
         self.manager = manager
+        self.results_root = (
+            Path(results_root).expanduser().resolve() if results_root else None
+        )
         self.automatic = automatic
 
     def is_enabled(self) -> bool:
@@ -405,8 +475,15 @@ class FeishuWebhookSink:
     def write(self, record: DecisionRecord) -> None:
         if not self.manager.is_ready():
             raise FeishuConfigurationError("飞书凭据尚未通过测试。")
+        message = render_message(record)
+        if self.results_root is not None:
+            plan = load_execution_plan(self.results_root, record)
+            if plan is not None:
+                message = merge_execution_and_decision_message(
+                    render_execution_plan_message(plan, record), message
+                )
         FeishuWebhookClient(
             self.manager.credentials(),
             opener=self.manager.opener,
             clock=self.manager.clock,
-        ).send(render_message(record))
+        ).send(message)

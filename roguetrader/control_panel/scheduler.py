@@ -151,13 +151,22 @@ class ProjectScheduler:
             self._batch_started_at = datetime.now().astimezone().isoformat(timespec="seconds")
         self._worker = threading.Thread(
             target=self._run_batch,
-            args=(config.enabled_symbols, scheduled_for),
+            args=(
+                config.enabled_symbols,
+                scheduled_for,
+                config.execution_plan_enabled,
+            ),
             name="roguetrader-scheduled-batch",
             daemon=True,
         )
         self._worker.start()
 
-    def _run_batch(self, symbols: tuple[str, ...], scheduled_for: datetime) -> None:
+    def _run_batch(
+        self,
+        symbols: tuple[str, ...],
+        scheduled_for: datetime,
+        execution_plan_enabled: bool = False,
+    ) -> None:
         trade_date = scheduled_for.date().isoformat()
         log_dir = self.state_dir / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -184,6 +193,7 @@ class ProjectScheduler:
                                 "event": "started",
                                 "symbol": symbol,
                                 "trade_date": trade_date,
+                                "trigger": "scheduled",
                                 "scheduled_for": scheduled_for.isoformat(timespec="seconds"),
                                 "started_at": started.isoformat(timespec="seconds"),
                             },
@@ -193,6 +203,18 @@ class ProjectScheduler:
                     )
                     log_file.flush()
                     try:
+                        run_environment = os.environ.copy()
+                        run_environment.update(
+                            {
+                                "ROGUETRADER_RUN_TRIGGER": "scheduled",
+                                "ROGUETRADER_SCHEDULED_FOR": scheduled_for.isoformat(
+                                    timespec="seconds"
+                                ),
+                                "ROGUETRADER_EXECUTION_PLAN_ENABLED": (
+                                    "1" if execution_plan_enabled else "0"
+                                ),
+                            }
+                        )
                         completed = subprocess.run(
                             command,
                             cwd=self.project_root,
@@ -200,6 +222,7 @@ class ProjectScheduler:
                             stderr=subprocess.STDOUT,
                             check=False,
                             text=True,
+                            env=run_environment,
                         )
                         exit_code = completed.returncode
                     except OSError as exc:
@@ -209,6 +232,11 @@ class ProjectScheduler:
                 record = {
                     "symbol": symbol,
                     "trade_date": trade_date,
+                    "runtime_mode": os.getenv(
+                        "ROGUETRADER_RUNTIME_MODE", "development"
+                    ),
+                    "trigger": "scheduled",
+                    "execution_plan_enabled": execution_plan_enabled,
                     "scheduled_for": scheduled_for.isoformat(timespec="seconds"),
                     "started_at": started.isoformat(timespec="seconds"),
                     "finished_at": finished.isoformat(timespec="seconds"),

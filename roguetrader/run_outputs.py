@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
 import json
+import os
+from pathlib import Path
+import tempfile
 from typing import Any
 
+from roguetrader.execution.models import PlanValidationError, build_execution_plan
 from roguetrader.output_paths import RunOutputPaths
 
 
-RUN_OUTPUT_SCHEMA_VERSION = "1.0"
+RUN_OUTPUT_SCHEMA_VERSION = "2.0"
 
 REPORT_SECTION_FILES = {
     "market_report": ("市场分析", "市场分析.md"),
@@ -25,6 +30,103 @@ REPORT_SECTION_FILES = {
 
 def relative_to_root(path, root) -> str:
     return str(path.relative_to(root))
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _publication_event_id(run_uid: str, decision_payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        {"run_uid": run_uid, "decision": decision_payload},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def default_publication_role(paths: RunOutputPaths) -> str:
+    identity = paths.identity
+    if (
+        identity is not None
+        and identity.runtime_mode == "prod"
+        and identity.trigger in {"scheduled", "recovery"}
+    ):
+        return "eligible"
+    return "candidate"
+
+
+def write_run_manifest(
+    paths: RunOutputPaths,
+    ticker: str,
+    *,
+    status: str,
+    publication_event_id: str | None = None,
+    publication_role: str | None = None,
+    error_type: str | None = None,
+    execution_plan_status: str | None = None,
+    execution_plan_error_type: str | None = None,
+) -> dict[str, Any]:
+    existing: dict[str, Any] = {}
+    if paths.manifest_path.is_file():
+        try:
+            loaded = json.loads(paths.manifest_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    identity = paths.identity
+    payload = dict(existing)
+    if identity is not None:
+        payload.update(identity.to_dict(ticker))
+    payload.update(
+        {
+            "schema_version": RUN_OUTPUT_SCHEMA_VERSION,
+            "run_id": paths.root.name,
+            "ticker": ticker,
+            "status": status,
+            "publication_role": publication_role
+            or str(existing.get("publication_role") or default_publication_role(paths)),
+            "updated_at": _now_iso(),
+        }
+    )
+    payload.setdefault("created_at", _now_iso())
+    if publication_event_id:
+        payload["publication_event_id"] = publication_event_id
+    if execution_plan_status is not None:
+        payload["execution_plan_status"] = execution_plan_status
+        if execution_plan_error_type:
+            payload["execution_plan_error_type"] = execution_plan_error_type
+        else:
+            payload.pop("execution_plan_error_type", None)
+    if status == "completed":
+        payload["completed_at"] = _now_iso()
+        payload.pop("error_type", None)
+    elif error_type:
+        payload["error_type"] = error_type
+    _atomic_json_write(paths.manifest_path, payload)
+    return payload
 
 
 def state_snapshot(final_state: dict[str, Any]) -> dict[str, Any]:
@@ -49,7 +151,7 @@ def build_markdown_report(ticker: str, trade_date: str, final_state: dict[str, A
         f"# RogueTrader 运行报告：{ticker}",
         "",
         f"- 分析日期：`{trade_date}`",
-        f"- 生成时间：`{datetime.now().isoformat(timespec='seconds')}`",
+        f"- 生成时间：`{_now_iso()}`",
         f"- 最终动作：`{decision}`",
         "",
     ]
@@ -70,7 +172,7 @@ def structured_decision_payload(
 ) -> dict[str, Any]:
     return {
         "schema_version": RUN_OUTPUT_SCHEMA_VERSION,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": _now_iso(),
         "ticker": ticker,
         "trade_date": trade_date,
         "action": decision,
@@ -93,6 +195,8 @@ def run_index_payload(
     trade_date: str,
     decision: str,
     selected_analysts: list[str] | None,
+    execution_plan_status: str = "disabled",
+    execution_plan_error_type: str | None = None,
 ) -> dict[str, Any]:
     section_files = {
         key: relative_to_root(paths.section_dir / filename, paths.root)
@@ -109,16 +213,25 @@ def run_index_payload(
     }
     if paths.log_path.exists():
         files["terminal_log"] = relative_to_root(paths.log_path, paths.root)
+    if paths.execution_plan_path.exists():
+        files["execution_plan"] = relative_to_root(
+            paths.execution_plan_path, paths.root
+        )
 
-    return {
+    payload = {
         "schema_version": RUN_OUTPUT_SCHEMA_VERSION,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": _now_iso(),
         "ticker": ticker,
         "trade_date": trade_date,
+        "analysis_date": trade_date,
         "action": decision,
         "selected_analysts": selected_analysts or [],
         "files": files,
+        "execution_plan": {"status": execution_plan_status},
     }
+    if execution_plan_error_type:
+        payload["execution_plan"]["error_type"] = execution_plan_error_type
+    return payload
 
 
 def write_run_outputs(
@@ -129,6 +242,9 @@ def write_run_outputs(
     decision: str,
     config: dict[str, Any] | None = None,
     selected_analysts: list[str] | None = None,
+    execution_plan_requested: bool = False,
+    execution_plan_draft: dict[str, Any] | None = None,
+    execution_plan_error_type: str | None = None,
 ) -> None:
     paths.root.mkdir(parents=True, exist_ok=True)
     paths.section_dir.mkdir(parents=True, exist_ok=True)
@@ -156,7 +272,7 @@ def write_run_outputs(
     paths.config_path.write_text(
         json.dumps(
             {
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "generated_at": _now_iso(),
                 "ticker": ticker,
                 "trade_date": trade_date,
                 "selected_analysts": selected_analysts or [],
@@ -175,18 +291,51 @@ def write_run_outputs(
         if content:
             (paths.section_dir / filename).write_text(str(content), encoding="utf-8")
 
-    paths.index_path.write_text(
-        json.dumps(
-            run_index_payload(
-                paths=paths,
-                ticker=ticker,
-                trade_date=trade_date,
-                decision=decision,
-                selected_analysts=selected_analysts,
-            ),
-            ensure_ascii=False,
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
+    if decision == "INCOMPLETE":
+        if paths.index_path.exists():
+            paths.index_path.unlink()
+        write_run_manifest(paths, ticker, status="incomplete")
+        return
+
+    manifest = write_run_manifest(paths, ticker, status="completed")
+    run_uid = str(manifest.get("run_uid") or paths.root.name)
+    event_id = _publication_event_id(run_uid, decision_payload)
+    plan_status = "disabled"
+    plan_error_type = execution_plan_error_type
+    if execution_plan_requested:
+        plan_status = "failed"
+        if execution_plan_draft is not None:
+            try:
+                execution_plan = build_execution_plan(
+                    execution_plan_draft,
+                    decision_event_id=event_id,
+                    ticker=ticker,
+                    analysis_date=trade_date,
+                    action=decision,
+                )
+                _atomic_json_write(paths.execution_plan_path, execution_plan)
+                plan_status = "parameterized"
+                plan_error_type = None
+            except (PlanValidationError, OSError) as exc:
+                plan_error_type = type(exc).__name__
+    write_run_manifest(
+        paths,
+        ticker,
+        status="completed",
+        publication_event_id=event_id,
+        execution_plan_status=plan_status,
+        execution_plan_error_type=plan_error_type,
     )
+    index_payload = run_index_payload(
+        paths=paths,
+        ticker=ticker,
+        trade_date=trade_date,
+        decision=decision,
+        selected_analysts=selected_analysts,
+        execution_plan_status=plan_status,
+        execution_plan_error_type=plan_error_type,
+    )
+    index_payload["publication_event_id"] = event_id
+    if paths.identity is not None:
+        index_payload.update(paths.identity.to_dict(ticker))
+    _atomic_json_write(paths.index_path, index_payload)

@@ -9,11 +9,21 @@ const elements = {
   masterLabel: document.querySelector("#masterLabel"),
   dailyTime: document.querySelector("#dailyTime"),
   saveTime: document.querySelector("#saveTime"),
+  executionPlanToggle: document.querySelector("#executionPlanToggle"),
+  executionPlanLabel: document.querySelector("#executionPlanLabel"),
   addTickerForm: document.querySelector("#addTickerForm"),
   tickerInput: document.querySelector("#tickerInput"),
   tickerList: document.querySelector("#tickerList"),
   runHistory: document.querySelector("#runHistory"),
   refreshButton: document.querySelector("#refreshButton"),
+  healthState: document.querySelector("#healthState"),
+  healthDate: document.querySelector("#healthDate"),
+  healthChecks: document.querySelector("#healthChecks"),
+  healthDeadline: document.querySelector("#healthDeadline"),
+  healthNextCheck: document.querySelector("#healthNextCheck"),
+  healthLastCheck: document.querySelector("#healthLastCheck"),
+  healthAlert: document.querySelector("#healthAlert"),
+  healthIssues: document.querySelector("#healthIssues"),
   publisherState: document.querySelector("#publisherState"),
   lastPublished: document.querySelector("#lastPublished"),
   baselineCount: document.querySelector("#baselineCount"),
@@ -115,7 +125,7 @@ function tickerRow(ticker) {
 
 function render(snapshot) {
   state.snapshot = snapshot;
-  const { config, scheduler, recent_runs: recentRuns, publisher } = snapshot;
+  const { config, scheduler, recent_runs: recentRuns, publisher, health = {} } = snapshot;
   const enabledTickers = config.tickers.filter((ticker) => ticker.enabled);
   elements.serviceBadge.textContent = scheduler.job_running
     ? `正在分析 ${scheduler.current_symbol || "任务"}` : "调度服务在线";
@@ -126,6 +136,56 @@ function render(snapshot) {
   elements.masterToggle.checked = config.enabled;
   elements.masterLabel.textContent = config.enabled ? "已开启" : "已关闭";
   elements.dailyTime.value = config.daily_time;
+  elements.executionPlanToggle.checked = Boolean(config.execution_plan_enabled);
+  elements.executionPlanLabel.textContent = config.execution_plan_enabled
+    ? "已开启" : "已关闭";
+
+  const healthLabels = {
+    starting: "正在启动",
+    unavailable: "服务不可用",
+    inactive: "随每日任务关闭",
+    waiting: "等待检查",
+    skipped: "冷启动：从下次开始",
+    retrying: "复查中",
+    healthy: "今日正常",
+    failed: "检查失败",
+    alerted: "失败告警已发送",
+    monitor_error: "审计器异常",
+  };
+  const healthState = healthLabels[health.state] || "状态未知";
+  elements.healthState.textContent = healthState;
+  const healthIsError = ["failed", "alerted", "monitor_error", "unavailable"].includes(health.state);
+  const healthIsHealthy = ["healthy", "waiting", "skipped", "inactive"].includes(health.state);
+  elements.healthState.className = `inline-state${healthIsError ? " error" : healthIsHealthy ? " online" : ""}`;
+  elements.healthDate.textContent = health.trade_date || "—";
+  elements.healthChecks.textContent = `${health.checks_completed || 0} / ${health.max_checks || 4}`;
+  elements.healthDeadline.textContent = formatDate(health.deadline_at);
+  elements.healthNextCheck.textContent = health.next_check_at ? formatDate(health.next_check_at) : "无需复查";
+  elements.healthLastCheck.textContent = health.last_check_at ? formatDate(health.last_check_at) : "尚未检查";
+  const alertLabels = {
+    not_required: "无需告警",
+    pending: "等待最终检查",
+    sent: "已发送",
+    failed: "发送失败",
+  };
+  elements.healthAlert.textContent = alertLabels[health.alert_status]
+    || health.alert_status || "—";
+  elements.healthIssues.replaceChildren();
+  const healthIssues = Array.isArray(health.issues) ? health.issues : [];
+  if (!healthIssues.length) {
+    const empty = document.createElement("p");
+    empty.className = "health-ok";
+    empty.textContent = health.state === "healthy" ? "今日分析和发布链路完整。" : "暂无异常。";
+    elements.healthIssues.append(empty);
+  } else {
+    healthIssues.forEach((issue) => {
+      const row = document.createElement("div");
+      row.className = "health-issue";
+      const scope = issue.symbol || "系统";
+      row.textContent = `${scope} · ${issue.label || issue.code}${issue.detail ? ` · ${issue.detail}` : ""}`;
+      elements.healthIssues.append(row);
+    });
+  }
 
   const publisherOnline = Boolean(publisher && publisher.service_running);
   elements.publisherState.textContent = publisherOnline ? "服务在线" : "服务未启动";
@@ -231,6 +291,20 @@ elements.saveTime.addEventListener("click", async () => {
     await refresh();
     showToast(`执行时间已更新为 ${elements.dailyTime.value}`);
   } catch (error) { showToast(error.message, true); }
+});
+
+elements.executionPlanToggle.addEventListener("change", async () => {
+  const enabled = elements.executionPlanToggle.checked;
+  try {
+    await request("/api/execution-plan", {
+      method: "POST", body: JSON.stringify({ enabled }),
+    });
+    await refresh();
+    showToast(`参数化执行计划已${enabled ? "开启" : "关闭"}`);
+  } catch (error) {
+    elements.executionPlanToggle.checked = !enabled;
+    showToast(error.message, true);
+  }
 });
 
 elements.addTickerForm.addEventListener("submit", async (event) => {

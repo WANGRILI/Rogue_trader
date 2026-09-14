@@ -221,6 +221,48 @@ class CredentialAndClientTests(unittest.TestCase):
 
 
 class SettingsAndRetryTests(unittest.TestCase):
+    def test_operational_alert_uses_failure_card_without_result_content(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ,
+            {FEISHU_WEBHOOK_ENV: WEBHOOK, FEISHU_SECRET_ENV: SECRET},
+            clear=True,
+        ):
+            opener = CapturingOpener(
+                [FakeResponse({"code": 0}), FakeResponse({"code": 0})]
+            )
+            manager = FeishuNotificationManager(
+                FeishuSettingsStore(Path(directory) / "feishu.json"),
+                opener=opener,
+                clock=lambda: FIXED_NOW,
+            )
+            manager.send_test()
+            manager.set_enabled(True)
+
+            sent_at = manager.send_operational_alert(
+                alert_id="h" * 64,
+                trade_date="2026-09-11",
+                scheduled_for="2026-09-11T05:00:00+08:00",
+                checked_at="2026-09-11T06:00:00+08:00",
+                issues=(
+                    {
+                        "code": "analysis_failed",
+                        "label": "分析进程执行失败",
+                        "symbol": "BTC-USD",
+                        "detail": "退出码 1",
+                    },
+                ),
+                checks_completed=4,
+            )
+
+            self.assertEqual(sent_at, FIXED_NOW.isoformat(timespec="seconds"))
+            payload = json.loads(opener.requests[-1][0].data)
+            serialized = json.dumps(payload, ensure_ascii=False)
+            self.assertIn("RogueTrader 每日任务失败告警", serialized)
+            self.assertIn("失败摘要", serialized)
+            self.assertIn("系统没有自动重跑付费分析", serialized)
+            self.assertNotIn(WEBHOOK, serialized)
+            self.assertNotIn(SECRET, serialized)
+
     def test_existing_publication_database_is_migrated_additively(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "publisher.sqlite3"

@@ -16,7 +16,8 @@
 #   market_analyst, social_media_analyst, news_analyst, fundamentals_analyst,
 #   onchain_analyst, bull_researcher, bear_researcher, research_manager,
 #   trader, aggressive_risk_analyst, conservative_risk_analyst,
-#   neutral_risk_analyst, portfolio_manager, reflector, signal_processor
+#   neutral_risk_analyst, portfolio_manager, execution_planner, reflector,
+#   signal_processor
 
 defaults:
   provider: deepseek
@@ -177,6 +178,18 @@ agents:
         Synthesize risk debate into a final Buy / Overweight / Hold / Underweight / Sell rating.
       style: |
         Be direct and risk-aware. Include actionable risk boundaries.
+
+  execution_planner:
+    llm:
+      tier: quick
+    prompt:
+      identity: |
+        You are the non-voting Execution Planner translating final decisions into structured plans.
+      focus: |
+        Preserve the portfolio manager's rating, use only stated price levels, and express a small
+        number of spot-only conditional orders with explicit sizing intent.
+      style: |
+        Return strict JSON only. Prefer simple, auditable scenarios over unnecessary complexity.
 
   reflector:
     llm:

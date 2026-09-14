@@ -59,6 +59,35 @@
       </section>
 
       <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">EXECUTION PLAN</p>
+            <h2>参数化执行计划</h2>
+          </div>
+          <label class="switch-control">
+            <input id="executionPlanToggle" type="checkbox" role="switch">
+            <span class="switch" aria-hidden="true"></span>
+            <span id="executionPlanLabel">已关闭</span>
+          </label>
+        </div>
+        <div class="publisher-grid">
+          <div>
+            <span>每日人工输入</span>
+            <strong>0 项</strong>
+          </div>
+          <div>
+            <span>数量表达</span>
+            <strong>X 参数</strong>
+          </div>
+          <div>
+            <span>真实下单</span>
+            <strong>始终禁用</strong>
+          </div>
+        </div>
+        <p class="hint">开启后每次分析多调用一次快速模型，直接生成 <code>执行计划.json</code>。委托数量使用 X_POSITION（执行时持仓）和 X_CASH（执行时可用资金）表达，不要求每日填写账户数据。</p>
+      </section>
+
+      <section class="panel">
         <div class="panel-heading ticker-heading">
           <div>
             <p class="section-label">UNIVERSE</p>
@@ -82,6 +111,44 @@
           <button id="refreshButton" class="button ghost" type="button">刷新</button>
         </div>
         <div id="runHistory" class="history-list"></div>
+      </section>
+
+      <section class="panel health-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">DAILY HEALTH</p>
+            <h2>每日任务健康审计</h2>
+          </div>
+          <span id="healthState" class="inline-state">正在连接</span>
+        </div>
+        <div class="publisher-grid health-grid">
+          <div>
+            <span>审计日期</span>
+            <strong id="healthDate">—</strong>
+          </div>
+          <div>
+            <span>检查进度</span>
+            <strong id="healthChecks">—</strong>
+          </div>
+          <div>
+            <span>最终截止</span>
+            <strong id="healthDeadline">—</strong>
+          </div>
+          <div>
+            <span>下次检查</span>
+            <strong id="healthNextCheck">—</strong>
+          </div>
+          <div>
+            <span>最近检查</span>
+            <strong id="healthLastCheck">—</strong>
+          </div>
+          <div>
+            <span>告警状态</span>
+            <strong id="healthAlert">—</strong>
+          </div>
+        </div>
+        <div id="healthIssues" class="health-issues" aria-live="polite"></div>
+        <p class="hint">计划时间后 15 分钟首次检查，随后复查三次；当前 05:00 任务会在 06:00 最终裁决。复查只检测状态并重试已有发布通道，不会自动重跑付费分析。</p>
       </section>
 
       <section class="panel publisher-panel">
@@ -130,7 +197,7 @@
               <strong id="feishuLastTest">—</strong>
             </div>
             <div>
-              <span>最近送达</span>
+              <span>合并卡片送达</span>
               <strong id="feishuLastSuccess">—</strong>
             </div>
             <div>
@@ -150,7 +217,7 @@
             <button id="testFeishu" class="button secondary" type="button">发送测试卡片</button>
             <button id="retryFeishu" class="button ghost" type="button">立即重试</button>
           </div>
-          <p class="hint">Webhook 与加签密钥只从当前运行环境的 <code>.env</code> 读取，页面和接口不会返回密钥。测试成功后才能开启自动推送。</p>
+          <p class="hint">存在 <code>执行计划.json</code> 时，只发送一张合并卡片：执行指令在前，决策摘要在后；没有计划时发送原决策卡片。Webhook 与加签密钥只从当前运行环境的 <code>.env</code> 读取，页面和接口不会返回密钥。</p>
         </div>
 
         <div class="channel-card">

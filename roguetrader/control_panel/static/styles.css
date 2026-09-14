@@ -176,6 +176,7 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(92, 255, 15
 
 .inline-state { color: var(--muted); font-size: 13px; }
 .inline-state.online { color: var(--green); }
+.inline-state.error { color: var(--red); }
 .publisher-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -209,6 +210,21 @@ code { color: #bcefd0; }
 .channel-actions { justify-content: flex-start; margin-top: 14px; }
 .feishu-grid { grid-template-columns: repeat(3, 1fr); }
 .feishu-grid strong { overflow-wrap: anywhere; }
+
+.health-issues {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.health-ok, .health-issue {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.health-ok { border: 1px solid #28563c; background: #102419; color: var(--green); }
+.health-issue { border: 1px solid #5b3034; background: #241315; color: #ffabb0; }
 
 .toast {
   position: fixed;

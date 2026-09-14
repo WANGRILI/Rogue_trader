@@ -84,6 +84,13 @@ class ConfigStore:
 
         return self.update(mutate)
 
+    def set_execution_plan_enabled(self, enabled: bool) -> ScheduleConfig:
+        if not isinstance(enabled, bool):
+            raise ValidationError("执行计划开关必须是布尔值。")
+        return self.update(
+            lambda config: config.evolve(execution_plan_enabled=enabled)
+        )
+
     def add_ticker(self, symbol: str) -> ScheduleConfig:
         normalized = normalize_symbol(symbol)
 
