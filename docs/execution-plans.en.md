@@ -84,6 +84,32 @@ The planner never assumes that a previous order filled. It carries strategy and 
 
 Each new plan is the single authoritative snapshot for that symbol, not an incremental patch. A still-valid instruction must appear again; an omitted instruction is considered cancelled or replaced. Older files remain available for audit.
 
+## Historical Backfill and Order Ledger
+
+Completed historical research does not need a full multi-agent rerun. The backfiller maps official rows in `每日决策.csv` to their `最终决策.json` files, then invokes the Execution Planner in official/development lineage, symbol, and analysis-date order so each day can reconcile the prior plan. Migrated `legacy` official history flows into later `prod` plans, while development remains isolated.
+
+The default command is a dry run: it makes no model call and writes no file.
+
+```bash
+ops/backfill-execution-plans
+```
+
+Applying a backfill requires an explicit cap on newly generated plans:
+
+```bash
+ops/backfill-execution-plans --apply --max-plans 10
+```
+
+Use `--date-from`, `--date-to`, and repeatable `--ticker` filters to narrow the set. Only official decision-ledger rows are selected by default; `--all-completed` explicitly includes development and manual candidates. Naive timestamps in early results are interpreted as `Asia/Shanghai`, matching the project's historical convention. A failure blocks later dates only in the same lineage and symbol, preserving continuity while allowing other symbols to proceed. The command sends no Feishu message and never reruns paid research.
+
+Batch requests default to a 60-second timeout and at most one SDK retry. `--request-timeout` and `--max-retries` can tune those values within guarded bounds. A successfully persisted plan never triggers another model call during a resumed run. A date-filtered retry automatically loads the immediately preceding plan in the same lineage; a missing predecessor or inconsistent existing lineage fails closed instead of silently creating a new baseline. Add `--summary-only` for long batches to print only totals and the first error.
+
+For isolated development, copy the required completed runs into the development result root, then use `--official-csv /path/to/每日决策.csv` as a read-only selector. Plans and the order ledger are still written only under `--results-root`, leaving the official source untouched.
+
+Each plan is also flattened into `my_results/汇总/参数化委托.csv`: one row per order, plus a `no_order` row for a scenario with no instruction. `plan_id`, `scenario_id`, `order_id`, and `order_event_id` preserve decision-to-scenario-to-order lineage. Reruns append only missing rows, and future daily publication uses the same CSV sink.
+
+The ledger can feed a point-in-time-safe OHLCV simulation directly. See [Parameterized Order Backtest](execution-backtest.en.md) for timing, execution assumptions, and evidence boundaries.
+
 ## Feishu Notification
 
 When Feishu group delivery is enabled, a new result with a valid `执行计划.json` sends one merged card: parameterized execution instructions first, then the full decision summary.

@@ -284,13 +284,13 @@ def normalize_execution_plan_draft(value: Any) -> dict[str, Any]:
         "max_position_pct": _number(
             risk.get("max_position_pct", 1.0),
             "risk_limits.max_position_pct",
-            minimum=0.01,
+            minimum=0.0,
             maximum=1.0,
         ),
         "max_order_cash_pct": _number(
             risk.get("max_order_cash_pct", 0.25),
             "risk_limits.max_order_cash_pct",
-            minimum=0.01,
+            minimum=0.0,
             maximum=1.0,
         ),
     }

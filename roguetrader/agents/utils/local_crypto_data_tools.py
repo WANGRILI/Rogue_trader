@@ -5,6 +5,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 
 from roguetrader.dataflows.local_crypto_data import get_local_ohlcv_report
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -21,10 +22,10 @@ def get_local_crypto_ohlcv(
     truth, but RogueTrader runtime reads only the standardized
     processed/parquet layer.
     """
-    return get_local_ohlcv_report(
-        ticker=ticker,
-        curr_date=curr_date,
-        days=days,
-        timeframe=timeframe,
-        source=source,
+    arguments = {"ticker": ticker, "curr_date": curr_date, "days": days, "timeframe": timeframe, "source": source}
+    return governed_call(
+        "get_local_crypto_ohlcv",
+        arguments,
+        "bounded",
+        lambda: get_local_ohlcv_report(**arguments),
     )

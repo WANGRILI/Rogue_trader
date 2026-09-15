@@ -7,6 +7,7 @@
 <p align="center">
   <a href="README.md">中文</a> ·
   <a href="README.en.md">English</a> ·
+  <a href="backtest/README.md">Backtest results</a> ·
   <a href="ROADMAP.en.md">Roadmap</a> ·
   <a href="docs/control-panel.en.md">Control panel</a> ·
   <a href="docs/production-development.en.md">Operations</a>
@@ -50,17 +51,31 @@ _Sanitized example state; it contains no credentials, personal paths, or generat
 - Optional multi-scenario, multi-order spot plans for paper simulation; live submission is always disabled.
 - Loopback-only control panel for schedule, time, and symbol management.
 - Sequential multi-symbol execution to avoid API and data-source contention.
-- CSV-first delivery with idempotent `event_id` records.
+- CSV-first delivery with an idempotent decision ledger and a separate order-level execution ledger for cross-date, cross-symbol review.
+- Layered validation: Signal / Plan Lifecycle Quality evaluates local decision value over each parameterized plan's actual lifetime, while OHLCV and multi-factor replays accept final PnL.
+- Point-in-time data governance with private tool snapshots, parameter hashes, and lineage; a historical rerun fails closed when its matching snapshot does not exist.
 - A merged Feishu card with instructions first and the full decision second, plus an independent spreadsheet channel.
 - Channel-only retries that never rerun paid analysis.
 - Immutable tagged production releases with rollback support.
 - Isolated development and production code, state, caches, results, and secrets.
 
+## 60-day historical validation
+
+Across 55 research-eligible plans, 298 parameterized orders, and 1,440 real hourly bars, RogueTrader completed the loop from agent decisions to continuous portfolio replay. One delayed repair without a contemporaneous snapshot was quarantined and treated as a day with no new trade. Results include modeled fees and slippage and represent a retrospective simulation, not live performance.
+
+| | OHLCV baseline | Multi-factor replay | Fully invested BTC |
+|---|---:|---:|---:|
+| Return | **+8.03%** | **+6.82%** | +25.47% |
+| Maximum drawdown | -2.24% | -2.57% | -6.45% |
+| Fills | 22 | 35 | — |
+
+The correction shows that one temporally contaminated decision—or one inverted condition interpretation—can materially change a portfolio conclusion. The lifecycle study no longer treats daily ratings as fixed-horizon forecasts: 48.15% of 27 executed plans beat a same-state no-action counterfactual; mean value add was -0.08% and median value add -0.01%. Inspect the [complete evidence archive](backtest/README.en.md), [Signal Quality method](docs/signal-quality.en.md), and [retrospective](docs/validation-evidence.en.md).
+
 ## Evolution
 
 ```text
 Foundation → Operations → Decision Integrity → Execution Intelligence → Validation Loop → Portfolio Intelligence
-   v1.0         v1.1             v1.2                  v1.3               Next               Horizon
+   v1.0         v1.1             v1.2                  v1.3               v1.4               Horizon
 ```
 
 The project is evolving from repeatable multi-agent research into measurable, feedback-driven investment intelligence. See the full [Evolution Roadmap](ROADMAP.en.md).
@@ -76,7 +91,12 @@ Local control panel
                     ├── completion marker + structured decision
                     └── optional state-free execution plan
                               ↓
-                    daily CSV (source of truth)
+                    daily CSV (audit source of truth)
+                              ├── point-in-time eligibility gate
+                              │     ├── Signal / Plan Lifecycle Quality
+                              │     │     └── activate → trigger/fill → exit/update/expiry
+                              │     └── research order projection
+                              │           └── Portfolio PnL → OHLCV / multi-factor
                               ├── local message package
                               ├── merged Feishu group card
                               └── Feishu spreadsheet row
@@ -124,14 +144,31 @@ my_results/
 │   ├── 报告.md
 │   ├── 状态.json
 │   └── 分段报告/
-└── 汇总/
-    ├── 每日决策.csv
-    └── 消息/
+├── 汇总/
+│   ├── 每日决策.csv
+│   ├── 参数化委托.csv
+│   └── 消息/
+├── 回测数据/
+│   └── 多因子条件版/<collection-time>__BTC_USD/
+└── 回测结果/
+    ├── <timestamp>__BTC_USD/ (OHLCV baseline)
+    └── 多因子条件版/<timestamp>__BTC_USD/
+        ├── 回测指标.json
+        ├── 权益曲线.csv
+        ├── 成交明细.csv
+        ├── 委托回测状态.csv
+        ├── 条件解析审计.csv
+        ├── 数据质量.json
+        ├── 数据来源.json
+        ├── 回测报告.md
+        ├── 回测报告.html
+        ├── 验证方法.ipynb
+        └── 结果清单.json
 ```
 
 The directory name separates actual start time, requested analysis date, runtime lane, trigger, attempt, and symbol. A lifecycle manifest exists even for failed runs; only successful runs receive `运行索引.json` and become publishable.
 
-Each symbol occupies one CSV row. Records are deduplicated by `event_id`; downstream channels consume the exact row reread from disk.
+Each symbol occupies one row in the decision ledger. Every plan is flattened into one row per scenario order in the execution ledger, with stable identities for idempotency. Official historical decisions can be planned in chronological order without rerunning the full agent team.
 
 ## Runtime isolation
 
@@ -166,6 +203,11 @@ Keep real credentials in the local `.env` only.
 - [Run-result protocol](docs/run-results.en.md)
 - [Production and development modes](docs/production-development.en.md)
 - [Parameterized execution plans](docs/execution-plans.en.md)
+- [Parameterized order backtest](docs/execution-backtest.en.md)
+- [Multi-factor conditional backtest](docs/execution-backtest-multifactor.en.md)
+- [Signal Quality](docs/signal-quality.en.md)
+- [Complete 60-day backtest results](backtest/README.en.md)
+- [60-day validation interpretation](docs/validation-evidence.en.md)
 - [Analysis engine](docs/analysis-engine.en.md)
 - [Models and data sources](docs/providers-and-data.en.md)
 - [Development and manual runs](docs/development.en.md)

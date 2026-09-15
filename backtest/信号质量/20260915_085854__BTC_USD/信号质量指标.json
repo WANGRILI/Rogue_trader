@@ -1,0 +1,142 @@
+{
+  "schema_version": "2.0",
+  "evaluation_status": "retrospective_lifecycle_replay",
+  "primary_layer": "plan_lifecycle_quality",
+  "primary_unit": "non_overlapping_active_plan_lifecycle",
+  "methodology": "event_driven_parameterized_plan_with_local_no_action_counterfactual",
+  "window_start": "2026-07-13T14:26:03+00:00",
+  "window_end_exclusive": "2026-09-11T14:26:03+00:00",
+  "bar_window_start": "2026-07-13T15:00:00+00:00",
+  "bar_window_end_exclusive": "2026-09-11T15:00:00+00:00",
+  "first_observed_bar": "2026-07-13T15:00:00+00:00",
+  "last_observed_bar": "2026-09-11T14:00:00+00:00",
+  "bars": 1440,
+  "active_lifecycle_bars": 1437,
+  "inactive_strategy_bars": 3,
+  "lifecycle_coverage": 0.9979166666666667,
+  "plan_count": 55,
+  "executed_plan_count": 27,
+  "inactive_plan_count": 28,
+  "plan_execution_rate": 0.4909090909090909,
+  "order_count": 298,
+  "filled_order_count": 35,
+  "order_fill_rate": 0.1174496644295302,
+  "take_profit_exit_count": 0,
+  "stop_loss_exit_count": 0,
+  "sell_limit_target_fill_count": 6,
+  "sell_stop_order_fill_count": 0,
+  "executed_plan_hit_rate_vs_no_action": 0.48148148148148145,
+  "executed_plan_mean_value_added_return": -0.0008337576417939829,
+  "executed_plan_median_value_added_return": -7.681344333798634e-05,
+  "positive_executed_plan_count": 13,
+  "negative_executed_plan_count": 14,
+  "mean_positive_value_added_return": 0.0029542560930745365,
+  "mean_negative_value_added_return": -0.004351198967029036,
+  "value_add_payoff_ratio": 0.678952195810912,
+  "strongest_plan_updates": [
+    {
+      "analysis_date": "2026-07-31",
+      "action": "SELL",
+      "filled_order_count": 1,
+      "lifecycle_hours": 48,
+      "lifecycle_value_added_return": 0.010268722014910914
+    },
+    {
+      "analysis_date": "2026-08-21",
+      "action": "BUY",
+      "filled_order_count": 4,
+      "lifecycle_hours": 48,
+      "lifecycle_value_added_return": 0.007538050467727375
+    },
+    {
+      "analysis_date": "2026-07-20",
+      "action": "HOLD",
+      "filled_order_count": 2,
+      "lifecycle_hours": 42,
+      "lifecycle_value_added_return": 0.004770896512227507
+    }
+  ],
+  "weakest_plan_updates": [
+    {
+      "analysis_date": "2026-07-13",
+      "action": "SELL",
+      "filled_order_count": 1,
+      "lifecycle_hours": 25,
+      "lifecycle_value_added_return": -0.03267948595539172
+    },
+    {
+      "analysis_date": "2026-08-19",
+      "action": "OVERWEIGHT",
+      "filled_order_count": 1,
+      "lifecycle_hours": 48,
+      "lifecycle_value_added_return": -0.007513363748862467
+    },
+    {
+      "analysis_date": "2026-08-28",
+      "action": "BUY",
+      "filled_order_count": 1,
+      "lifecycle_hours": 24,
+      "lifecycle_value_added_return": -0.00573414407423245
+    }
+  ],
+  "executed_plan_mean_value_add_mfe": 0.002438942818606834,
+  "executed_plan_mean_value_add_mae": -0.002712106363141433,
+  "all_plan_mean_value_added_return": -0.00040929920597142813,
+  "order_status_counts": {
+    "cancelled_by_new_plan": 38,
+    "condition_not_met_at_data_end": 2,
+    "condition_not_met_before_supersession": 215,
+    "filled": 35,
+    "no_quantity": 3,
+    "open_at_data_end": 1,
+    "rejected_by_portfolio_state": 4
+  },
+  "lifecycle_end_reason_counts": {
+    "expired": 1,
+    "superseded_by_next_plan": 53,
+    "window_end": 1
+  },
+  "execution_result": {
+    "total_return": 0.06816724469261004,
+    "max_drawdown": -0.025742286221968724,
+    "benchmark_return": 0.2547281126243832,
+    "condition_evaluation_coverage": 1.0,
+    "research_integrity": {
+      "policy": "point_in_time_strict_with_legacy_same_run_compatibility",
+      "eligible_decisions": 55,
+      "excluded_decisions": 1,
+      "excluded_events": [
+        {
+          "event_id": "5fcb4c0366a7617f3e9f4585349e3c3a4f9dd7364dbb1c22c961a13e853fc3a2",
+          "analysis_date": "2026-08-20",
+          "reason_code": "delayed_repair_without_snapshot"
+        }
+      ]
+    }
+  },
+  "data_quality": {
+    "plan_order_key_match": true,
+    "status_rows_match_metrics": true,
+    "fill_rows_match_metrics": true,
+    "curve_market_timeline_match": true,
+    "non_overlapping_plan_lifecycles": true
+  },
+  "guardrails": [
+    "不再把每日配置评级扩展成固定远期独立样本。",
+    "计划价值增量以同一入场现金和持仓原地不动作为局部反事实。",
+    "未触发条件不是亏损，只保留其生命周期状态。",
+    "价值增量包含仓位、成交、手续费和滑点影响，不等同纯方向 Forecast Alpha。",
+    "声明代理仍不等同原始条件真值，必须与精确证据分开解读。"
+  ],
+  "market_data_quality": {
+    "rows": 18138,
+    "confirmed_rows": 18138,
+    "unconfirmed_rows_filtered": 1,
+    "duplicate_timestamps": 0,
+    "missing_hourly_bars": 0,
+    "coverage_ratio": 1.0,
+    "start": "2024-08-19T08:00:00+00:00",
+    "end": "2026-09-14T01:00:00+00:00"
+  },
+  "generated_at": "2026-09-15T01:29:13+00:00"
+}

@@ -1,0 +1,163 @@
+{
+  "factor_manifest": {
+    "schema_version": "1.0",
+    "collected_at": "2026-09-14T16:13:59+00:00",
+    "requested_start": "2026-07-12T08:09:52+00:00",
+    "requested_end": "2026-09-20T21:08:38+00:00",
+    "availability_policy": {
+      "fear_greed": "provider timestamp",
+      "etf_flow": "US trade date + 24 hours",
+      "funding_rate": "funding timestamp",
+      "coinmetrics_daily": "metric date + 24 hours",
+      "coinbase_daily": "candle start + 24 hours"
+    },
+    "sources": [
+      {
+        "dataset": "恐慌贪婪.csv",
+        "url": "https://api.alternative.me/fng/?limit=0&format=json"
+      },
+      {
+        "dataset": "ETF资金流.csv",
+        "url": "https://farside.co.uk/bitcoin-etf-flow-all-data/"
+      },
+      {
+        "dataset": "资金费率.csv",
+        "path": "crypto_data_lake/data/curated/records/public_funding_rate_history.jsonl"
+      },
+      {
+        "dataset": "MVRV.csv",
+        "url": "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
+        "metric": "CapMVRVCur"
+      },
+      {
+        "dataset": "算力.csv",
+        "url": "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
+        "metric": "HashRate"
+      },
+      {
+        "dataset": "全市场成交量.csv",
+        "url": "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
+        "metric": "volume_reported_spot_usd_1d"
+      },
+      {
+        "dataset": "Coinbase日线.csv",
+        "url": "https://api.exchange.coinbase.com/products/BTC-USD/candles"
+      }
+    ],
+    "quality": {
+      "恐慌贪婪.csv": {
+        "rows": 124,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-14T00:00:00+00:00",
+        "available_start": "2026-05-14T00:00:00+00:00",
+        "available_end": "2026-09-14T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 24.0
+      },
+      "ETF资金流.csv": {
+        "rows": 84,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-14T00:00:00+00:00",
+        "available_start": "2026-05-15T00:00:00+00:00",
+        "available_end": "2026-09-15T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 96.0
+      },
+      "资金费率.csv": {
+        "rows": 214,
+        "start": "2026-07-05T00:00:00+00:00",
+        "end": "2026-09-14T00:00:00+00:00",
+        "available_start": "2026-07-05T00:00:00+00:00",
+        "available_end": "2026-09-14T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 8.0
+      },
+      "MVRV.csv": {
+        "rows": 123,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-13T00:00:00+00:00",
+        "available_start": "2026-05-15T00:00:00+00:00",
+        "available_end": "2026-09-14T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 24.0
+      },
+      "算力.csv": {
+        "rows": 123,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-13T00:00:00+00:00",
+        "available_start": "2026-05-15T00:00:00+00:00",
+        "available_end": "2026-09-14T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 24.0
+      },
+      "全市场成交量.csv": {
+        "rows": 123,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-13T00:00:00+00:00",
+        "available_start": "2026-05-15T00:00:00+00:00",
+        "available_end": "2026-09-14T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 24.0
+      },
+      "Coinbase日线.csv": {
+        "rows": 124,
+        "start": "2026-05-14T00:00:00+00:00",
+        "end": "2026-09-14T00:00:00+00:00",
+        "available_start": "2026-05-15T00:00:00+00:00",
+        "available_end": "2026-09-15T00:00:00+00:00",
+        "duplicate_keys": 0,
+        "null_values": 0,
+        "maximum_gap_hours": 24.0
+      }
+    },
+    "files": {
+      "资金费率.csv": {
+        "sha256": "bd0e38c828986946599cfb1ebbb89150962e2ad6a524f64a17df62775617fb3c",
+        "bytes": 14705
+      },
+      "宏观事件.json": {
+        "sha256": "5c27d93c0029daaea935c3284acca874d0fe1b215bb64540bc0b4f446dc00079",
+        "bytes": 1458
+      },
+      "全市场成交量.csv": {
+        "sha256": "65f3388da71744a7fd467753822cff5b92c48355de3ce69ab1f215624b70f25d",
+        "bytes": 8529
+      },
+      "恐慌贪婪.csv": {
+        "sha256": "3a49ee1124c98585af06c26b5c02c639a3d6801f2f3a9fd99dfda4d7266314cd",
+        "bytes": 8175
+      },
+      "Coinbase日线.csv": {
+        "sha256": "e21abb3165d7a0d8e9eb8c471dbb2dc97aefe8cc6c9246c142fabe190d67dc20",
+        "bytes": 14899
+      },
+      "MVRV.csv": {
+        "sha256": "721383107f8cddf6a986443a6ab07b854fe0593d4626a269e675fa02a824338b",
+        "bytes": 8738
+      },
+      "ETF资金流.csv": {
+        "sha256": "2ba45f39248c3756fa4bce7f9313b90f98f242f832275d1cca1b473443c3a917",
+        "bytes": 4926
+      },
+      "算力.csv": {
+        "sha256": "0183a9962da81f125e42489d650fbddaf6dfcc06f2a7981962f261117aa4f082",
+        "bytes": 8642
+      }
+    }
+  },
+  "documentation": {
+    "fear_greed": "https://alternative.me/crypto/fear-and-greed-index/",
+    "etf_flow": "https://farside.co.uk/bitcoin-etf-flow-all-data/",
+    "funding_rate": "https://app.okx.com/docs-v5/en/#public-data-rest-api-get-funding-rate-history",
+    "network_metrics": "https://docs.coinmetrics.io/api/v4/",
+    "coinbase_candles": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+    "fomc_calendar": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "cpi_calendar": "https://www.bls.gov/schedule/news_release/cpi.htm"
+  }
+}

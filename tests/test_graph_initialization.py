@@ -25,6 +25,19 @@ class GraphInitializationTests(unittest.TestCase):
 
         self.assertEqual(str(llm.openai_api_base), "http://example.test/v1")
 
+    def test_graph_forwards_timeout_and_retry_config_to_llm_clients(self):
+        graph = object.__new__(RogueTraderGraph)
+        graph.config = {
+            "llm_provider": "deepseek",
+            "llm_timeout": 120,
+            "llm_max_retries": 3,
+        }
+
+        self.assertEqual(
+            graph._get_provider_kwargs(),
+            {"timeout": 120, "max_retries": 3},
+        )
+
     def test_graph_uses_configured_recursion_limit(self):
         config = DEFAULT_CONFIG.copy()
         config.update(

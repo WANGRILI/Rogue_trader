@@ -9,6 +9,7 @@
 from langchain_core.tools import tool
 from typing import Annotated
 from roguetrader.dataflows.interface import route_to_vendor
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -29,11 +30,19 @@ def get_indicators(
     Returns:
         str: A formatted dataframe containing the technical indicators for the specified ticker symbol and indicator.
     """
-    indicators = [i.strip() for i in indicator.split(",") if i.strip()]
-    results = []
-    for ind in indicators:
-        try:
-            results.append(route_to_vendor("get_indicators", symbol, ind, curr_date, look_back_days))
-        except ValueError as e:
-            results.append(str(e))
-    return "\n\n".join(results)
+    def fetch() -> str:
+        indicators = [i.strip() for i in indicator.split(",") if i.strip()]
+        results = []
+        for ind in indicators:
+            try:
+                results.append(route_to_vendor("get_indicators", symbol, ind, curr_date, look_back_days))
+            except ValueError as e:
+                results.append(str(e))
+        return "\n\n".join(results)
+
+    return governed_call(
+        "get_indicators",
+        {"symbol": symbol, "indicator": indicator, "curr_date": curr_date, "look_back_days": look_back_days},
+        "bounded",
+        fetch,
+    )

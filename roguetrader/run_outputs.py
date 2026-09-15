@@ -87,6 +87,7 @@ def write_run_manifest(
     error_type: str | None = None,
     execution_plan_status: str | None = None,
     execution_plan_error_type: str | None = None,
+    data_mode: str | None = None,
 ) -> dict[str, Any]:
     existing: dict[str, Any] = {}
     if paths.manifest_path.is_file():
@@ -112,6 +113,9 @@ def write_run_manifest(
         }
     )
     payload.setdefault("created_at", _now_iso())
+    if data_mode is not None:
+        payload["data_mode"] = data_mode
+        payload["data_governance_required"] = True
     if publication_event_id:
         payload["publication_event_id"] = publication_event_id
     if execution_plan_status is not None:

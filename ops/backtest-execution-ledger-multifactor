@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+MULTIFACTOR_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[[ -x "$MULTIFACTOR_PROJECT_ROOT/.venv/bin/python" ]] || {
+  echo "Development environment is missing: $MULTIFACTOR_PROJECT_ROOT/.venv" >&2
+  exit 69
+}
+
+cd "$MULTIFACTOR_PROJECT_ROOT"
+export PYTHONDONTWRITEBYTECODE=1
+exec .venv/bin/python -m roguetrader.backtest.multifactor "$@"

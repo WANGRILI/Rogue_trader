@@ -20,6 +20,7 @@ from roguetrader.control_panel.health_monitor import (
 from roguetrader.control_panel.server import ControlPanelServer, LOOPBACK_HOSTS
 from roguetrader.control_panel.storage import ConfigStore, RunHistoryStore
 from roguetrader.publisher.service import LocalPublisher, PublisherWatcher
+from roguetrader.publisher.execution_csv import ExecutionPlanCsvSink
 from roguetrader.publisher.sinks import CsvDecisionSink, LocalMessageSink
 from roguetrader.publisher.state import PublicationState
 from roguetrader.publisher.feishu import (
@@ -99,6 +100,9 @@ def main() -> None:
         state=publication_state,
         sinks=(
             CsvDecisionSink(summary_dir / "每日决策.csv"),
+            ExecutionPlanCsvSink(
+                summary_dir / "参数化委托.csv", PROJECT_ROOT / "my_results"
+            ),
             LocalMessageSink(summary_dir / "消息"),
             FeishuWebhookSink(feishu_manager, PROJECT_ROOT / "my_results"),
             FeishuSheetSink(feishu_sheet_manager),

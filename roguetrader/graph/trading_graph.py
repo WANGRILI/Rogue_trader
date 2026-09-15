@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+from datetime import date
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Dict, Any, List, Optional
 
@@ -52,6 +53,7 @@ from roguetrader.run_outputs import (
     write_run_manifest,
     write_run_outputs,
 )
+from roguetrader.dataflows.temporal import data_access_session
 from roguetrader.llm_clients.agent_registry import AgentLLMRegistry
 from roguetrader.execution.planner import (
     ExecutionPlanner,
@@ -185,6 +187,13 @@ class RogueTraderGraph:
         kwargs = {}
         provider = self.config.get("llm_provider", "").lower()
 
+        timeout = self.config.get("llm_timeout")
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        max_retries = self.config.get("llm_max_retries")
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
+
         if provider == "google":
             thinking_level = self.config.get("google_thinking_level")
             if thinking_level:
@@ -256,6 +265,10 @@ class RogueTraderGraph:
         run_context = self.config.get("run_context", {})
         if not isinstance(run_context, dict):
             run_context = {}
+        requested_data_mode = run_context.get("data_mode")
+        data_mode = requested_data_mode or (
+            "historical_strict" if date.fromisoformat(str(trade_date)) < date.today() else "live"
+        )
         while True:
             self.current_output_paths = make_run_output_paths(
                 self.config.get("results_dir", "my_results"),
@@ -275,6 +288,7 @@ class RogueTraderGraph:
             self.current_output_paths,
             company_name,
             status="running",
+            data_mode=data_mode,
         )
         previous_execution_plan = None
         if self.execution_planner is not None:
@@ -295,7 +309,12 @@ class RogueTraderGraph:
         final_state = None
         decision = None
 
-        with self.current_output_paths.log_path.open("a", encoding="utf-8") as log_file:
+        with self.current_output_paths.log_path.open("a", encoding="utf-8") as log_file, data_access_session(
+            self.current_output_paths.root,
+            str(trade_date),
+            mode=data_mode,
+            replay_snapshot_dir=run_context.get("replay_snapshot_dir"),
+        ):
             stdout = _TeeStream(sys.stdout, log_file)
             stderr = _TeeStream(sys.stderr, log_file)
             with redirect_stdout(stdout), redirect_stderr(stderr):

@@ -8,6 +8,7 @@
 from langchain_core.tools import tool
 from typing import Annotated
 from roguetrader.dataflows.interface import route_to_vendor
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -26,4 +27,9 @@ def get_stock_data(
     Returns:
         str: A formatted dataframe containing the stock price data for the specified ticker symbol in the specified date range.
     """
-    return route_to_vendor("get_stock_data", symbol, start_date, end_date)
+    return governed_call(
+        "get_stock_data",
+        {"symbol": symbol, "start_date": start_date, "end_date": end_date},
+        "bounded",
+        lambda: route_to_vendor("get_stock_data", symbol, start_date, end_date),
+    )

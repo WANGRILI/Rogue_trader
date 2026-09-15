@@ -16,6 +16,7 @@ from roguetrader.dataflows.crypto_indicators import (
     get_funding_rate_data,
 )
 from roguetrader.dataflows.onchain_data import get_fear_greed_index
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -29,7 +30,7 @@ def get_pi_cycle_indicator(
     it historically marks major BTC cycle tops. Most useful for BTC
     but can be applied to other major cryptos.
     """
-    return calculate_pi_cycle(symbol, curr_date)
+    return governed_call("get_pi_cycle_indicator", {"symbol": symbol, "curr_date": curr_date}, "snapshot_required", lambda: calculate_pi_cycle(symbol, curr_date))
 
 
 @tool
@@ -43,7 +44,7 @@ def get_nvt_ratio(
     High NVT suggests overvaluation, low NVT suggests undervaluation.
     Currently only available for Bitcoin.
     """
-    return calculate_nvt_ratio(symbol, curr_date)
+    return governed_call("get_nvt_ratio", {"symbol": symbol, "curr_date": curr_date}, "snapshot_required", lambda: calculate_nvt_ratio(symbol, curr_date))
 
 
 @tool
@@ -57,7 +58,7 @@ def get_crypto_fear_greed(
     Historically, extreme fear has been a buying opportunity
     and extreme greed has signaled market tops.
     """
-    return get_fear_greed_index(look_back_days)
+    return governed_call("get_crypto_fear_greed", {"curr_date": curr_date, "look_back_days": look_back_days}, "snapshot_required", lambda: get_fear_greed_index(look_back_days))
 
 
 @tool
@@ -70,7 +71,7 @@ def get_funding_rate(
     Positive funding = longs paying shorts (crowded long, potentially bearish).
     Negative funding = shorts paying longs (crowded short, potential squeeze).
     """
-    return get_funding_rate_data(symbol, curr_date)
+    return governed_call("get_funding_rate", {"symbol": symbol, "curr_date": curr_date}, "snapshot_required", lambda: get_funding_rate_data(symbol, curr_date))
 
 
 @tool
@@ -82,4 +83,4 @@ def get_cme_gap(
     CME futures trade Mon-Fri only; gaps form over weekends.
     Historically ~77% of CME gaps get filled.
     """
-    return calculate_cme_gap(curr_date)
+    return governed_call("get_cme_gap", {"curr_date": curr_date}, "snapshot_required", lambda: calculate_cme_gap(curr_date))

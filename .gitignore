@@ -229,6 +229,11 @@ my_results/汇总/
 my_results/历史日志/
 my_results/.imports/
 my_results/.migrations/
+my_results/回测数据/
+my_results/回测结果/
+my_results/研究/
+my_results/**/数据快照/
+my_results/**/数据血缘.json
 
 # Local agent/session state
 .claw/

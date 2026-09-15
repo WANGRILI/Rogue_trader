@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "files": {
+    "验证方法.ipynb": {
+      "sha256": "636098438d4a329ff968ff2fd035731678bfc6caf04387eb73b1ae338ee8c533",
+      "bytes": 1636
+    },
+    "回测报告.html": {
+      "sha256": "63f2d781f8951077c25b0ec2f48d2f49e8e5731474227ec60219cf4436fa79c6",
+      "bytes": 20460
+    },
+    "回测报告.md": {
+      "sha256": "67d51e8c72d3511f19c3c5c0414c49733d709d6565c5b0728b9bfc21f20db515",
+      "bytes": 2728
+    },
+    "数据来源.json": {
+      "sha256": "a6e9e488ccadd4ea49c62cc7f5aeee66a75ab8229db1a3f4de4a2e061183238e",
+      "bytes": 5780
+    },
+    "数据质量.json": {
+      "sha256": "d65a4fa4652d1a8bbbe2e36b8546602d2311e5b4d191d82c63fb028fbb477b5e",
+      "bytes": 1521
+    },
+    "条件解析审计.csv": {
+      "sha256": "5a9765f0ef64368eb643c4738c97ecfd27db3b5f33454b3ede316afb58c22858",
+      "bytes": 79464
+    },
+    "委托回测状态.csv": {
+      "sha256": "dc31ebff3d85c8cda89cd4cb13ef0b012571ad8b0cdfa7bd48da2c5d43f59939",
+      "bytes": 71920
+    },
+    "成交明细.csv": {
+      "sha256": "1f1fa288ca2da89574cffb4bc0dd76f3bcc8fd7ccb24a01cee2ea693183e7b5c",
+      "bytes": 11466
+    },
+    "权益曲线.csv": {
+      "sha256": "811411c89531de1eb9e878eabcdd0ee3cffce13b4507b4f914cbdb3ff4d501f3",
+      "bytes": 154678
+    },
+    "回测指标.json": {
+      "sha256": "99f6a6684d106f600fdb03a9eb26def10725be46ec4d2401c3cbc87bce6818b8",
+      "bytes": 4281
+    }
+  }
+}

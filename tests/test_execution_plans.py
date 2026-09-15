@@ -305,6 +305,91 @@ class ExecutionPlanTests(unittest.TestCase):
                 final_decision_text="Hold.",
             )
 
+    def test_planner_recomputes_model_supplied_size_expression(self):
+        draft = execution_draft()
+        draft["scenarios"][0]["orders"][0]["size_expression"] = "30% position"
+        llm = FakeLlm(json.dumps(draft))
+
+        result = ExecutionPlanner(llm).create_draft(
+            ticker="BTC-USD",
+            analysis_date="2026-09-13",
+            action="UNDERWEIGHT",
+            final_decision_text="Reduce 30% of the position.",
+        )
+
+        self.assertEqual(
+            result["scenarios"][0]["orders"][0]["size_expression"],
+            "0.3 × X_POSITION",
+        )
+
+    def test_planner_preserves_incomplete_price_trigger_as_confirmation(self):
+        draft = execution_draft()
+        draft["scenarios"][1]["trigger"] = {
+            "type": "last_price",
+            "condition": "日线收盘跌破明确支撑并伴随成交量确认",
+        }
+        llm = FakeLlm(json.dumps(draft, ensure_ascii=False))
+
+        result = ExecutionPlanner(llm).create_draft(
+            ticker="BTC-USD",
+            analysis_date="2026-09-13",
+            action="UNDERWEIGHT",
+            final_decision_text="等待日线和成交量共同确认。",
+        )
+
+        self.assertEqual(
+            result["scenarios"][1]["trigger"],
+            {
+                "type": "manual_confirmation",
+                "condition": "日线收盘跌破明确支撑并伴随成交量确认",
+            },
+        )
+
+    def test_planner_fails_bare_price_trigger_closed(self):
+        draft = execution_draft()
+        draft["scenarios"][1]["trigger"] = {"type": "last_price"}
+
+        result = ExecutionPlanner(
+            FakeLlm(json.dumps(draft, ensure_ascii=False))
+        ).create_draft(
+            ticker="BTC-USD",
+            analysis_date="2026-09-13",
+            action="UNDERWEIGHT",
+            final_decision_text="等待条件确认。",
+        )
+
+        self.assertEqual(
+            result["scenarios"][1]["trigger"],
+            {
+                "type": "manual_confirmation",
+                "condition": "等待人工确认：模型未提供完整的价格触发方向和阈值。",
+            },
+        )
+
+    def test_planner_compacts_long_technical_ids_and_dependency_reference(self):
+        draft = execution_draft()
+        long_scenario = "scenario_" + "x" * 60
+        long_order = "order_" + "y" * 60
+        draft["scenarios"][0]["scenario_id"] = long_scenario
+        draft["scenarios"][0]["orders"][0]["order_id"] = long_order
+        draft["scenarios"][0]["orders"][1]["after_order_id"] = long_order
+        llm = FakeLlm(json.dumps(draft))
+
+        result = ExecutionPlanner(llm).create_draft(
+            ticker="BTC-USD",
+            analysis_date="2026-09-13",
+            action="UNDERWEIGHT",
+            final_decision_text="Reduce exposure in sequence.",
+        )
+
+        scenario = result["scenarios"][0]
+        self.assertEqual(len(scenario["scenario_id"]), 48)
+        self.assertEqual(len(scenario["orders"][0]["order_id"]), 48)
+        self.assertEqual(
+            scenario["orders"][1]["after_order_id"],
+            scenario["orders"][0]["order_id"],
+        )
+
     def test_previous_plan_is_linked_without_account_state(self):
         previous = built_plan()
         draft = execution_draft()
@@ -323,6 +408,7 @@ class ExecutionPlanTests(unittest.TestCase):
         self.assertEqual(result["continuity_action"], "amend")
         self.assertIn("保留减仓", result["change_summary"])
         self.assertIn("complete authoritative snapshot", llm.prompts[0])
+        self.assertNotIn('"size_expression"', llm.prompts[0])
 
     def test_find_previous_plan_stays_in_same_runtime_lane(self):
         with tempfile.TemporaryDirectory() as tmp:

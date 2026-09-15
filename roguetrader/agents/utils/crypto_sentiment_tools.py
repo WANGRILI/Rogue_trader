@@ -13,6 +13,7 @@ from roguetrader.dataflows.crypto_sentiment import (
     get_aggregated_crypto_sentiment,
     get_crypto_trending,
 )
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -26,7 +27,7 @@ def get_crypto_sentiment(
     developer activity, CoinGecko community scores, and trending coins
     into a comprehensive sentiment report.
     """
-    return get_aggregated_crypto_sentiment(ticker, curr_date)
+    return governed_call("get_crypto_sentiment", {"ticker": ticker, "curr_date": curr_date}, "snapshot_required", lambda: get_aggregated_crypto_sentiment(ticker, curr_date))
 
 
 @tool
@@ -36,4 +37,4 @@ def get_crypto_trending_coins() -> str:
     Shows the top trending coins, categories, and NFTs based on
     search volume and social activity.
     """
-    return get_crypto_trending()
+    return governed_call("get_crypto_trending_coins", {}, "snapshot_required", get_crypto_trending)

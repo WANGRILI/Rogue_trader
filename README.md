@@ -7,6 +7,7 @@
 <p align="center">
   <a href="README.md">中文</a> ·
   <a href="README.en.md">English</a> ·
+  <a href="backtest/README.md">回测结果</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
   <a href="docs/control-panel.md">控制面板</a> ·
   <a href="docs/production-development.md">生产运维</a>
@@ -50,17 +51,31 @@ _图片为脱敏示例状态，不包含真实凭据、个人路径或实际决�
 - **参数化执行计划**：用 `X_POSITION` / `X_CASH` 直接表达多场景、多委托指令，并自动承接同标的上一份计划；每日无需账户输入，飞书合并卡片按“指令在前、决策在后”展示，真实下单始终禁用。
 - **每日自动调度**：本机控制面板管理总开关、北京时间、分析标的和每个标的的独立开关。
 - **多标的串行执行**：同一批标的依次运行，避免模型额度和数据源并发争用。
-- **CSV-first 发布**：每个完整结果先幂等追加到本地 CSV；后续通知只读取刚落盘的同一条记录。
+- **CSV-first 发布**：每个完整结果先幂等追加到决策主表；多场景委托再展开为独立的参数化委托明细表，适合跨日、跨标的筛选。
+- **分层验证闭环**：`Signal / Plan Lifecycle Quality` 按参数化计划的真实有效期评价局部决策贡献；OHLCV 与多因子组合回放继续验收最终 PnL。
+- **时点数据治理**：每次工具调用留下私有快照、参数哈希与数据血缘；历史补跑缺少匹配快照时安全停止，不允许把今天的数据伪装成过去。
 - **飞书双通道**：向飞书群发送“执行指令 + 完整决策摘要”的合并卡片，同时向普通电子表格追加一行。
 - **失败隔离**：消息或表格失败只重试对应通道，不会重新触发付费分析。
 - **不可变生产版本**：生产环境运行固定 Git 标签、锁定依赖和独立虚拟环境，旧版本始终可回滚。
 - **开发/生产隔离**：源码、状态、缓存、结果目录和 `.env` 分离，开发不会覆盖生产运行态。
 
+## 60 日历史验证
+
+基于 55 份研究合格计划、298 条参数化委托和 1,440 根真实 1H K 线，系统完成了从 Agent 决策到连续组合回放的闭环。另有 1 份延迟修复决策因缺少当时数据快照被隔离，视为当日无新交易。结果为计入手续费和滑点的事后模拟，不是实盘收益。
+
+| | OHLCV 基础版 | 多因子条件版 | BTC 持有基准 |
+|---|---:|---:|---:|
+| 收益 | **+8.03%** | **+6.82%** | +25.47% |
+| 最大回撤 | -2.24% | -2.57% | -6.45% |
+| 成交 | 22 | 35 | — |
+
+治理修正说明一份污染决策或一条错误解释的条件都足以改变组合结论；修正后系统仍降低了回撤，也仍明显错过强势趋势。生命周期评估不再把每日评级假设为固定期限预测：27 份实际成交计划中，48.15% 优于相同初始状态下的“原地不动”，平均价值增量为 -0.08%、中位数为 -0.01%。查看[完整回测结果](backtest/README.md)、[Signal Quality 方法](docs/signal-quality.md)与[证据复盘](docs/validation-evidence.md)。
+
 ## 演进路线
 
 ```text
 Foundation → Operations → Decision Integrity → Execution Intelligence → Validation Loop → Portfolio Intelligence
-   v1.0         v1.1             v1.2                  v1.3               Next               Horizon
+   v1.0         v1.1             v1.2                  v1.3               v1.4               Horizon
 ```
 
 项目正从“可重复运行的多智能体研究”走向“可衡量、可反馈的投资决策智能”。查看完整的 [Evolution Roadmap](ROADMAP.md)。
@@ -77,7 +92,12 @@ Foundation → Operations → Decision Integrity → Execution Intelligence → 
                     ├── 最终决策.json
                     └── 执行计划.json（可选，仅模拟）
                               ↓
-                    每日决策.csv（唯一事实来源）
+                    每日决策.csv（审计事实来源）
+                              ├── 时点资格门禁
+                              │     ├── Signal / Plan Lifecycle Quality
+                              │     │     └── 激活 → 条件/成交 → 止盈止损/更新/到期
+                              │     └── 研究委托投影
+                              │           └── Portfolio PnL → OHLCV / 多因子
                               ├── 本地消息包
                               ├── 飞书群合并卡片
                               └── 飞书电子表格新行
@@ -134,14 +154,31 @@ my_results/
 │       ├── 运行配置.json
 │       ├── 终端日志.log
 │       └── 分段报告/
-└── 汇总/
-    ├── 每日决策.csv
-    └── 消息/
+├── 汇总/
+│   ├── 每日决策.csv
+│   ├── 参数化委托.csv
+│   └── 消息/
+├── 回测数据/
+│   └── 多因子条件版/<采集时间>__BTC_USD/
+└── 回测结果/
+    ├── <回测时间>__BTC_USD/（OHLCV 基线）
+    └── 多因子条件版/<回测时间>__BTC_USD/
+        ├── 回测指标.json
+        ├── 权益曲线.csv
+        ├── 成交明细.csv
+        ├── 委托回测状态.csv
+        ├── 条件解析审计.csv
+        ├── 数据质量.json
+        ├── 数据来源.json
+        ├── 回测报告.md
+        ├── 回测报告.html
+        ├── 验证方法.ipynb
+        └── 结果清单.json
 ```
 
 目录名依次表达实际启动时间、请求分析日期、运行环境、触发类型、尝试次数和标的。失败运行也保留清单，但只有成功运行拥有 `运行索引.json`，因此不会被误发布。历史和迁移规则见[运行结果协议](docs/run-results.md)。
 
-同一天的多个标的各占 CSV 一行，并通过 `event_id` 幂等去重。详细协议见[本地结果发布器](docs/local-publisher.md)。
+同一天的多个标的在决策主表中各占一行；每份执行计划在委托明细表中按“场景 × 委托”展开，并分别使用稳定 ID 幂等去重。历史正式决策也可按时间顺序补生成执行计划，无需重跑完整 Agent 团队。详细协议见[本地结果发布器](docs/local-publisher.md)。
 
 ## 生产与开发
 
@@ -183,6 +220,11 @@ cp .env.example .env
 - [本地结果发布器](docs/local-publisher.md)：CSV-first、幂等、重试和飞书协议。
 - [运行结果协议](docs/run-results.md)：目录命名、运行清单、重跑和历史迁移。
 - [参数化执行计划](docs/execution-plans.md)：多场景委托、X 参数、跨日承接和可选模拟绑定。
+- [参数化委托回测](docs/execution-backtest.md)：委托时间、真实 OHLCV、成交模型和报告口径。
+- [多因子条件回测](docs/execution-backtest-multifactor.md)：ETF、情绪、链上、宏观条件的时点重放与证据分级。
+- [Signal Quality](docs/signal-quality.md)：计划自然生命周期、逐单状态与局部原地不动反事实。
+- [60 日完整回测结果](backtest/README.md)：信号质量、基础版与多因子版的报告和审计数据。
+- [60 日历史验证解读](docs/validation-evidence.md)：收益、回撤、基准比较与策略复盘。
 - [生产/开发双模式](docs/production-development.md)：不可变发布、激活与回滚。
 - [分析引擎](docs/analysis-engine.md)：智能体角色、辩论流程和决策输出。
 - [模型与数据源](docs/providers-and-data.md)：Provider、行情、链上数据和标的格式。
@@ -197,7 +239,7 @@ uv run --frozen python -m unittest discover -s tests -v
 uv run --frozen python -m compileall -q cli roguetrader tests my_scripts main.py
 ```
 
-当前测试覆盖调度配置、控制面板安全策略、运行目录、信号提取、CSV 幂等、历史基线、飞书消息、飞书表格以及发布重试。
+当前测试覆盖调度配置、控制面板安全策略、运行目录、信号提取、双 CSV 幂等、历史计划回填、研究隔离与链路重接、数据快照重放、Signal Quality、OHLCV 与多因子回测、飞书消息、飞书表格以及发布重试。
 
 ## 许可证与来源
 

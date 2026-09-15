@@ -4,6 +4,36 @@
 
 This document records the project's major production changes. Git history remains the source for implementation-level detail.
 
+## Unreleased
+
+## v1.5.0 — 2026-09-15
+
+- Added point-in-time data governance: current-day tool calls create private snapshots and lineage; historical dates fail closed without a matching snapshot.
+- Removed the “run start plus 20 minutes” order-time fallback and routed delayed repairs through the research eligibility gate.
+- Added a research-only order projection that preserves source artifacts, treats quarantined dates as no new trade, and deterministically reconnects plan lineage.
+- Corrected Signal Quality's unit of analysis: parameterized plan lifecycles and order terminal states replace fixed-horizon rating samples, with a same-state no-action counterfactual.
+- Rebuilt the strict 60-day evidence: +8.03% OHLCV baseline and +6.82% multi-factor replay; replaced the public archive and removed machine-local absolute paths.
+
+## v1.4.3 — 2026-09-15
+
+- Made LLM request timeout and retry settings explicit and configurable in production to reduce full-run failures from transient upstream read timeouts.
+- Fixed the version launcher so explicit analysis arguments use the CLI entrypoint and preserve recovery identity, original schedule time, and parent-run linkage.
+
+## v1.4.1 — 2026-09-15
+
+- Simplified the 60-day validation boundaries so the public narrative retains only its retrospective-simulation status.
+
+## v1.4.0 — 2026-09-15
+
+- Added a historical execution-plan backfiller that selects official decisions, preserves per-symbol chronology, and requires an explicit model-call cap.
+- Date-filtered retries now seed the immediate predecessor and reject missing or discontinuous lineage.
+- Added `参数化委托.csv`, an order-level plan ledger with scenario lineage, no-order markers, stable idempotency keys, and automatic daily appends.
+- Upgraded the order ledger to v2 with availability provenance, structured triggers, backtest validity, and risk limits; repair-displaced history falls back to run start plus 20 minutes.
+- Added a point-in-time order backtest over confirmed OKX 1H OHLCV with metrics, equity, fills, per-order status, and Markdown/HTML reports.
+- Preserved the OHLCV baseline and added a parallel multi-factor replay over ETF, sentiment, funding, network, volume, and macro history, with point-in-time availability and exact/proxy evidence audits for every external condition.
+- Added a strict 60×24-hour dual-track validation case with real market history, modeled costs, a fully invested benchmark, and an explicit strategy retrospective while keeping raw decisions and research data private.
+- Extended daily health audits to cover order-ledger delivery; historical backfill sends no Feishu message and never reruns full research.
+
 ## v1.3.1 — 2026-09-14
 
 - Added a bilingual Evolution Roadmap that presents major releases, current capabilities, and long-term direction as product stages.

@@ -47,6 +47,12 @@ class RuntimeModeTests(unittest.TestCase):
         self.assertIn("--frozen", launcher)
         self.assertIn("--check", launcher)
 
+    def test_version_launcher_routes_explicit_arguments_to_cli_entrypoint(self):
+        launcher = (PROJECT_ROOT / "ops" / "run-version").read_text(encoding="utf-8")
+
+        self.assertIn('if ((${#PASSTHROUGH[@]})); then', launcher)
+        self.assertIn('ENTRYPOINT="my_scripts/roguetrader0.py"', launcher)
+
     def test_production_panel_uses_active_release_and_production_state(self):
         launcher = (PROJECT_ROOT / "ops" / "production-control-panel-service").read_text(
             encoding="utf-8"

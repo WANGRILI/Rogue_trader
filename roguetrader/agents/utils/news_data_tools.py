@@ -9,6 +9,7 @@ from langchain_core.tools import tool
 from typing import Annotated
 from functools import lru_cache
 from roguetrader.dataflows.interface import route_to_vendor
+from roguetrader.dataflows.temporal import governed_call
 
 
 @lru_cache(maxsize=64)
@@ -39,7 +40,12 @@ def get_news(
     Returns:
         str: A formatted string containing news data
     """
-    return _cached_get_news(ticker, start_date, end_date)
+    return governed_call(
+        "get_news",
+        {"ticker": ticker, "start_date": start_date, "end_date": end_date},
+        "snapshot_required",
+        lambda: _cached_get_news(ticker, start_date, end_date),
+    )
 
 
 @tool
@@ -58,7 +64,12 @@ def get_global_news(
     Returns:
         str: A formatted string containing global news data
     """
-    return _cached_get_global_news(curr_date, look_back_days, limit)
+    return governed_call(
+        "get_global_news",
+        {"curr_date": curr_date, "look_back_days": look_back_days, "limit": limit},
+        "snapshot_required",
+        lambda: _cached_get_global_news(curr_date, look_back_days, limit),
+    )
 
 
 @tool
@@ -73,4 +84,9 @@ def get_insider_transactions(
     Returns:
         str: A report of insider transaction data
     """
-    return route_to_vendor("get_insider_transactions", ticker)
+    return governed_call(
+        "get_insider_transactions",
+        {"ticker": ticker},
+        "snapshot_required",
+        lambda: route_to_vendor("get_insider_transactions", ticker),
+    )

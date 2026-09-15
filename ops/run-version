@@ -97,6 +97,12 @@ ENTRYPOINT="$(sed -n 's/^[[:space:]]*"entrypoint": "\([^"]*\)",\{0,1\}$/\1/p' "$
   echo "Invalid release entrypoint metadata: $ENTRYPOINT" >&2
   exit 69
 }
+# Release metadata points to the no-argument daily application. Explicit run
+# arguments require the CLI entrypoint so recovery identity, ticker, date, and
+# execution-plan flags are actually parsed instead of silently ignored.
+if ((${#PASSTHROUGH[@]})); then
+  ENTRYPOINT="my_scripts/roguetrader0.py"
+fi
 [[ -f "$RELEASE/$ENTRYPOINT" ]] || { echo "Release entrypoint is missing: $ENTRYPOINT" >&2; exit 69; }
 
 COMMIT="$(git -C "$RELEASE" rev-parse --short=12 HEAD)"

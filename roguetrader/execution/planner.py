@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,72 @@ from .models import (
 
 class PlannerOutputError(ValueError):
     """Raised when the execution planner does not return the required JSON."""
+
+
+def _compact_model_identifier(value: Any) -> Any:
+    if not isinstance(value, str) or len(value.strip()) <= 48:
+        return value
+    normalized = value.strip()
+    suffix = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]
+    return f"{normalized[:39]}_{suffix}"
+
+
+def _normalize_model_scenarios(scenarios: Any) -> Any:
+    """Remove derived fields and fail incomplete price triggers closed."""
+
+    if not isinstance(scenarios, list):
+        return scenarios
+    cleaned: list[Any] = []
+    for raw_scenario in scenarios:
+        if not isinstance(raw_scenario, dict):
+            cleaned.append(raw_scenario)
+            continue
+        scenario = dict(raw_scenario)
+        scenario["scenario_id"] = _compact_model_identifier(
+            scenario.get("scenario_id")
+        )
+        if scenario.get("exclusive_group") is not None:
+            scenario["exclusive_group"] = _compact_model_identifier(
+                scenario["exclusive_group"]
+            )
+        trigger = scenario.get("trigger")
+        if isinstance(trigger, dict):
+            normalized_trigger = dict(trigger)
+            if normalized_trigger.get("type") == "last_price" and (
+                "operator" not in normalized_trigger
+                or "value" not in normalized_trigger
+            ):
+                condition = normalized_trigger.get("condition")
+                if not isinstance(condition, str) or not condition.strip():
+                    condition = (
+                        "等待人工确认：模型未提供完整的价格触发方向和阈值。"
+                    )
+                normalized_trigger = {
+                    "type": "manual_confirmation",
+                    "condition": condition.strip(),
+                }
+            scenario["trigger"] = normalized_trigger
+        orders = scenario.get("orders")
+        if isinstance(orders, list):
+            cleaned_orders: list[Any] = []
+            for raw_order in orders:
+                if not isinstance(raw_order, dict):
+                    cleaned_orders.append(raw_order)
+                    continue
+                order = {
+                    key: value
+                    for key, value in raw_order.items()
+                    if key != "size_expression"
+                }
+                order["order_id"] = _compact_model_identifier(order.get("order_id"))
+                if order.get("after_order_id") is not None:
+                    order["after_order_id"] = _compact_model_identifier(
+                        order["after_order_id"]
+                    )
+                cleaned_orders.append(order)
+            scenario["orders"] = cleaned_orders
+        cleaned.append(scenario)
+    return cleaned
 
 
 def find_previous_execution_plan(
@@ -151,7 +218,9 @@ class ExecutionPlanner:
                     "action": previous_plan["action"],
                     "valid_until": previous_plan["valid_until"],
                     "plan_summary": previous_plan["plan_summary"],
-                    "scenarios": previous_plan["scenarios"],
+                    "scenarios": _normalize_model_scenarios(
+                        previous_plan["scenarios"]
+                    ),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -190,6 +259,8 @@ Rules:
 - Use after_order_id only for a later order in the same scenario.
 - If the decision calls for no order and gives no objective trigger, return one immediate scenario with an empty orders array.
 - Keep valid_for_hours between 1 and 168, scenarios at most 8, and orders per scenario at most 6.
+- Keep both risk-limit percentages between 0 and 1. Zero is valid when the decision forbids remaining exposure or new cash deployment.
+- Keep scenario_id, exclusive_group, order_id, and after_order_id at 48 lowercase ASCII characters or fewer.
 - Do not include account balances, current positions, explanations outside JSON, or fields absent from this schema.
 
 Required JSON shape:
@@ -198,6 +269,7 @@ Required JSON shape:
         response = self.llm.invoke(prompt)
         try:
             draft = _json_object(response.content)
+            draft["scenarios"] = _normalize_model_scenarios(draft.get("scenarios"))
             if previous_plan is None:
                 draft["previous_plan_id"] = None
                 draft["continuity_action"] = "baseline"

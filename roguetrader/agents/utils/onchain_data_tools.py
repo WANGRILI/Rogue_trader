@@ -21,6 +21,7 @@ from roguetrader.dataflows.onchain_data import (
     get_protocol_tvl,
     COIN_TO_CHAIN,
 )
+from roguetrader.dataflows.temporal import governed_call
 
 
 @tool
@@ -34,7 +35,7 @@ def get_onchain_metrics(
     fully diluted valuation, ATH/ATL, and multi-timeframe price changes.
     """
     coin_id = resolve_coin_id(ticker)
-    return get_coin_market_data(coin_id, curr_date)
+    return governed_call("get_onchain_metrics", {"ticker": ticker, "curr_date": curr_date}, "snapshot_required", lambda: get_coin_market_data(coin_id, curr_date))
 
 
 @tool
@@ -48,7 +49,7 @@ def get_whale_activity(
     and trading activity distribution.
     """
     coin_id = resolve_coin_id(ticker)
-    return get_exchange_flows_summary(coin_id, curr_date)
+    return governed_call("get_whale_activity", {"ticker": ticker, "curr_date": curr_date}, "snapshot_required", lambda: get_exchange_flows_summary(coin_id, curr_date))
 
 
 @tool
@@ -61,17 +62,17 @@ def get_defi_tvl(
     Can fetch TVL for either a blockchain (e.g. Ethereum, Solana)
     or a specific DeFi protocol (e.g. aave, uniswap).
     """
-    chain_or_protocol_lower = chain_or_protocol.lower()
+    def fetch() -> str:
+        chain_or_protocol_lower = chain_or_protocol.lower()
+        chain_names = {v.lower(): v for v in COIN_TO_CHAIN.values()}
+        if chain_or_protocol_lower in chain_names:
+            return get_chain_tvl(chain_names[chain_or_protocol_lower])
+        for coin_id, chain_name in COIN_TO_CHAIN.items():
+            if chain_or_protocol_lower in (coin_id.lower(), chain_name.lower()):
+                return get_chain_tvl(chain_name)
+        return get_protocol_tvl(chain_or_protocol_lower)
 
-    chain_names = {v.lower(): v for v in COIN_TO_CHAIN.values()}
-    if chain_or_protocol_lower in chain_names:
-        return get_chain_tvl(chain_names[chain_or_protocol_lower])
-
-    for coin_id, chain_name in COIN_TO_CHAIN.items():
-        if chain_or_protocol_lower in (coin_id.lower(), chain_name.lower()):
-            return get_chain_tvl(chain_name)
-
-    return get_protocol_tvl(chain_or_protocol_lower)
+    return governed_call("get_defi_tvl", {"chain_or_protocol": chain_or_protocol, "curr_date": curr_date}, "snapshot_required", fetch)
 
 
 @tool
@@ -83,7 +84,7 @@ def get_stablecoin_flows(
     Shows top stablecoins by circulating supply, indicating
     capital available for crypto markets.
     """
-    return get_stablecoin_supply(curr_date)
+    return governed_call("get_stablecoin_flows", {"curr_date": curr_date}, "snapshot_required", lambda: get_stablecoin_supply(curr_date))
 
 
 @tool
@@ -95,4 +96,4 @@ def get_mining_stats(
     Includes hash rate, difficulty, transaction count, active addresses,
     miner revenue, and transaction volume with 7-day trends.
     """
-    return get_btc_onchain_summary(curr_date)
+    return governed_call("get_mining_stats", {"curr_date": curr_date}, "snapshot_required", lambda: get_btc_onchain_summary(curr_date))

@@ -25,8 +25,8 @@ Research OS  →  Production Operations  →  Decision Integrity
 | **Foundation · v1.0** | Shipped | 从研究原型升级为生产/开发隔离、可回滚的版本化系统。 |
 | **Operations · v1.1** | Shipped | 建立自动调度、CSV-first 发布、飞书双通道与运行告警。 |
 | **Decision Integrity · v1.2** | Shipped | 统一运行身份、分析日期、重跑关系和正式结果边界。 |
-| **Execution Intelligence · v1.3** | Current | 引入非投票执行规划 Agent，将最终判断转化为跨日承接的参数化多委托。 |
-| **Validation Loop** | Next | 让计划进入模拟成交、持仓演进与收益归因，形成可衡量的决策反馈。 |
+| **Execution Intelligence · v1.3** | Shipped | 引入非投票执行规划 Agent，将最终判断转化为跨日承接的参数化多委托。 |
+| **Validation Loop · v1.4+** | Current | 以 Signal Quality 诊断研究判断，以 Portfolio PnL 验收完整系统，并用时点数据治理锁住证据边界。 |
 | **Portfolio Intelligence** | Horizon | 从单标的判断走向多资产配置、组合约束与自适应策略治理。 |
 
 ## Strategic Horizons

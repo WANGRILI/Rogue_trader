@@ -25,8 +25,8 @@ Research OS  →  Production Operations  →  Decision Integrity
 | **Foundation · v1.0** | Shipped | Evolved from a research prototype into isolated, versioned, and rollback-ready runtimes. |
 | **Operations · v1.1** | Shipped | Established scheduling, CSV-first delivery, dual Feishu channels, and operational alerts. |
 | **Decision Integrity · v1.2** | Shipped | Unified run identity, analysis dates, rerun lineage, and official-result boundaries. |
-| **Execution Intelligence · v1.3** | Current | Added a non-voting planning agent that translates final judgment into continuous, parameterized multi-order scenarios. |
-| **Validation Loop** | Next | Connect plans to simulated fills, portfolio state, and performance attribution for measurable feedback. |
+| **Execution Intelligence · v1.3** | Shipped | Added a non-voting planning agent that translates final judgment into continuous, parameterized multi-order scenarios. |
+| **Validation Loop · v1.4+** | Current | Diagnose research with Signal Quality, accept the end-to-end system with Portfolio PnL, and enforce point-in-time evidence boundaries. |
 | **Portfolio Intelligence** | Horizon | Move from single-asset judgment toward allocation, portfolio constraints, and adaptive strategy governance. |
 
 ## Strategic Horizons

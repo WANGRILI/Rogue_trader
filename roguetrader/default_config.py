@@ -31,6 +31,10 @@ DEFAULT_CONFIG = {
     "quick_think_llm": os.getenv("ROGUETRADER_QUICK_THINK_LLM", "deepseek-v4-flash"),  # 快速思考模型
     "backend_url": os.getenv("ROGUETRADER_BACKEND_URL", "https://api.deepseek.com"),  # API端点
     "agent_config_path": os.getenv("ROGUETRADER_AGENT_CONFIG"),  # Agent身份/模型配置YAML
+    # 单次生成可能包含较长的工具结果；给兼容 OpenAI 的提供商留出足够读取时间，
+    # 并显式重试瞬时网络/上游超时。环境变量允许生产环境按提供商调整。
+    "llm_timeout": float(os.getenv("ROGUETRADER_LLM_TIMEOUT", "120")),
+    "llm_max_retries": int(os.getenv("ROGUETRADER_LLM_MAX_RETRIES", "3")),
 
     # ==================== 提供商特定思考配置 ====================
     # Google Gemini

@@ -190,6 +190,7 @@ class DailyHealthMonitorTests(unittest.TestCase):
 
     def complete_local_delivery(self, run_dir):
         finish_delivery(self.state, run_dir, "csv")
+        finish_delivery(self.state, run_dir, "execution_csv")
         finish_delivery(self.state, run_dir, "local_message")
 
     def test_waits_until_first_checkpoint_then_marks_complete_chain_healthy(self):

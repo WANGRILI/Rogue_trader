@@ -49,6 +49,8 @@ ISSUE_LABELS = {
     "publisher_unavailable": "结果发布器未运行",
     "csv_pending": "本地 CSV 尚未写入",
     "csv_failed": "本地 CSV 写入失败",
+    "execution_csv_pending": "参数化委托 CSV 尚未写入",
+    "execution_csv_failed": "参数化委托 CSV 写入失败",
     "local_message_pending": "本地消息尚未生成",
     "local_message_failed": "本地消息生成失败",
     "feishu_not_ready": "飞书群通知配置不可用",
@@ -457,7 +459,11 @@ class DailyHealthMonitor:
 
     def _delivery_issues(self, record: DecisionRecord) -> list[HealthIssue]:
         issues: list[HealthIssue] = []
-        required = (("csv", "csv"), ("local_message", "local_message"))
+        required = (
+            ("csv", "csv"),
+            ("execution_csv", "execution_csv"),
+            ("local_message", "local_message"),
+        )
         for sink, prefix in required:
             status = self.publication_state.delivery_status(record.event_id, sink)
             if status != "success":

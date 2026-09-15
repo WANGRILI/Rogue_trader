@@ -2,10 +2,11 @@
 
 [中文](local-publisher.md) · [English](local-publisher.en.md)
 
-The publisher is isolated from analysis. It consumes a completed structured decision, appends the local CSV, rereads the exact row, and only then feeds the local message package, Feishu group notification, and Feishu spreadsheet. Publication itself makes no LLM calls.
+The publisher is isolated from analysis. It consumes a completed structured decision, appends the decision ledger, rereads the exact row, and only then feeds the order ledger, local message package, Feishu group notification, and Feishu spreadsheet. Publication itself makes no LLM calls.
 
 ```text
 completed run → CSV write + fsync → reread by event_id
+                                      ├── parameterized order CSV
                                       ├── local message package
                                       ├── Feishu group message
                                       └── Feishu spreadsheet
@@ -18,6 +19,7 @@ The active runtime writes to `my_results/汇总/`:
 ```text
 my_results/汇总/
 ├── 每日决策.csv
+├── 参数化委托.csv
 └── 消息/
     └── <event_id>.json
 ```
@@ -35,6 +37,8 @@ decision_summary, source_schema_version, publication_schema_version
 
 Strings use standard CSV escaping. Values beginning with `= + - @` are neutralized against spreadsheet-formula injection.
 
+`参数化委托.csv` is a derived audit view of validated `执行计划.json` files. It flattens each scenario order into one row and retains an orderless scenario as `row_type=no_order`. v2 adds structured triggers, order availability time and provenance, backtest validity, and risk limits. Only the real final-decision timestamp is accepted; an anomalous historical repair without a matching snapshot is quarantined by the research gate instead of receiving a synthetic fallback time. Stable `order_event_id` values prevent duplicates, and a v1 ledger upgrades from its source plans.
+
 ## Integrity and Idempotency
 
 - `运行清单.json` records the full lifecycle; only successful directories containing both `运行索引.json` and `最终决策.json` are publishable.
@@ -46,7 +50,7 @@ Strings use standard CSV escaping. Values beginning with `= + - @` are neutraliz
 - CSV is the local source of truth. After write and `fsync`, the publisher rereads and validates the logical row by `event_id`; downstream channels no longer consume raw decision JSON directly.
 - Existing `event_id` values prevent duplicate CSV rows.
 - Local message packages use `event_id` as the filename and remain idempotent.
-- A CSV failure blocks all downstream channels. Once CSV succeeds, local message, Feishu group, and Feishu Sheet retain independent delivery and retry state; failure never rolls back CSV or reruns paid analysis.
+- A decision-ledger failure blocks every downstream target. Once it succeeds, the order ledger, local message, Feishu group, and Feishu Sheet retain independent delivery and retry state; failure never rolls back the source ledger or reruns paid analysis.
 - When a valid `执行计划.json` exists, the Feishu group card merges instructions first and the decision second. Both sections share one delivery state and add no model call.
 - Registered downstream retries can recover from the CSV even if the raw result later becomes unavailable.
 - Automatic polling processes new events discovered from completed runs. Manually editing CSV rows does not trigger delivery; historical maintenance remains explicit.

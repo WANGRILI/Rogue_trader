@@ -1,0 +1,83 @@
+{
+  "initial_balance": 10000.0,
+  "final_equity": 10803.284106922478,
+  "total_return": 0.08032841069224772,
+  "benchmark_final_equity": 12547.281126243832,
+  "benchmark_return": 0.2547281126243832,
+  "excess_return": -0.1743997019321354,
+  "max_drawdown": -0.02239303520234459,
+  "benchmark_max_drawdown": -0.06447814696954057,
+  "annualized_volatility": 0.10917944256015835,
+  "sharpe_zero_rate": 4.4463029822000095,
+  "exposure_ratio": 0.9125,
+  "turnover": 3.994644636786303,
+  "total_fees": 39.94644636786302,
+  "fill_count": 22,
+  "buy_fill_count": 9,
+  "sell_fill_count": 13,
+  "cancelled_order_count": 28,
+  "rejected_order_count": 2,
+  "plan_count": 55,
+  "total_order_count": 298,
+  "ohlcv_evaluable_order_count": 56,
+  "manual_condition_order_count": 242,
+  "ohlcv_evaluation_coverage": 0.18791946308724833,
+  "condition_evaluable_order_count": 56,
+  "condition_evaluation_coverage": 0.18791946308724833,
+  "manual_exact_order_count": 0,
+  "manual_proxy_order_count": 0,
+  "manual_unevaluated_order_count": 242,
+  "triggered_manual_scenario_count": 0,
+  "triggered_exact_scenario_count": 0,
+  "triggered_proxy_scenario_count": 0,
+  "status_counts": {
+    "not_evaluated_manual_confirmation": 242,
+    "cancelled_by_new_plan": 28,
+    "filled": 22,
+    "no_quantity": 3,
+    "rejected_by_portfolio_state": 2,
+    "open_at_data_end": 1
+  },
+  "order_time_source_counts": {
+    "decision_generated_at": 55
+  },
+  "start": "2026-07-13T15:00:00+00:00",
+  "end": "2026-09-11T14:00:00+00:00",
+  "bars": 1440,
+  "fee_rate": 0.001,
+  "slippage_rate": 0.0005,
+  "initial_state_assumption": "100% BTC, 0% cash",
+  "execution_model": "point_in_time_hourly_ohlcv_next_safe_bar",
+  "condition_model": "manual_conditions_not_evaluated",
+  "requested_window_start": "2026-07-13T14:26:03+00:00",
+  "requested_window_end_exclusive": "2026-09-11T14:26:03+00:00",
+  "requested_window_days": 60,
+  "requested_window_hours": 1440,
+  "bar_window_start": "2026-07-13T15:00:00+00:00",
+  "bar_window_end_exclusive": "2026-09-11T15:00:00+00:00",
+  "window_alignment_policy": "decision_bounds_then_next_complete_hour_grid",
+  "window_selection_policy": "explicit",
+  "research_integrity": {
+    "policy": "point_in_time_strict_with_legacy_same_run_compatibility",
+    "eligible_decisions": 55,
+    "excluded_decisions": 1,
+    "excluded_events": [
+      {
+        "event_id": "5fcb4c0366a7617f3e9f4585349e3c3a4f9dd7364dbb1c22c961a13e853fc3a2",
+        "analysis_date": "2026-08-20",
+        "reason_code": "delayed_repair_without_snapshot"
+      }
+    ]
+  },
+  "data_quality": {
+    "source": "crypto_data_lake/data/curated/ohlcv/symbol=BTC-USDT/timeframe=1H/data.csv",
+    "rows": 18138,
+    "confirmed_rows": 18138,
+    "unconfirmed_rows_filtered": 1,
+    "duplicate_timestamps": 0,
+    "missing_hourly_bars": 0,
+    "coverage_ratio": 1.0,
+    "start": "2024-08-19T08:00:00+00:00",
+    "end": "2026-09-14T01:00:00+00:00"
+  }
+}

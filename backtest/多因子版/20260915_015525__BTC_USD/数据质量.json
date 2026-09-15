@@ -1,0 +1,47 @@
+{
+  "market": {
+    "source": "crypto_data_lake/data/curated/ohlcv/symbol=BTC-USDT/timeframe=1H/data.csv",
+    "rows": 18138,
+    "confirmed_rows": 18138,
+    "unconfirmed_rows_filtered": 1,
+    "duplicate_timestamps": 0,
+    "missing_hourly_bars": 0,
+    "coverage_ratio": 1.0,
+    "start": "2024-08-19T08:00:00+00:00",
+    "end": "2026-09-14T01:00:00+00:00"
+  },
+  "factors": {
+    "bundle": "private_results/回测数据/多因子条件版/20260915_001359__BTC_USD",
+    "manifest_collected_at": "2026-09-14T16:13:59+00:00",
+    "hourly_rows": 18138,
+    "evaluation_rows": 1440,
+    "evaluation_start": "2026-07-13T15:00:00+00:00",
+    "evaluation_end": "2026-09-11T14:00:00+00:00",
+    "start": "2024-08-19T08:00:00+00:00",
+    "end": "2026-09-14T01:00:00+00:00",
+    "duplicate_timestamps": 0,
+    "feature_coverage": {
+      "etf_flow_usd_m": 1.0,
+      "fear_greed": 1.0,
+      "funding_rate": 1.0,
+      "cm_CapMVRVCur": 1.0,
+      "cm_HashRate": 1.0,
+      "cm_volume_reported_spot_usd_1d": 1.0,
+      "coinbase_volume_usd": 1.0,
+      "daily_close": 1.0,
+      "daily_rsi_14": 1.0,
+      "daily_ema_10": 1.0,
+      "daily_vwma_20": 1.0,
+      "daily_sma_200": 1.0,
+      "weekly_close": 1.0
+    },
+    "minimum_required_coverage": 1.0,
+    "availability_policy": {
+      "fear_greed": "provider timestamp",
+      "etf_flow": "US trade date + 24 hours",
+      "funding_rate": "funding timestamp",
+      "coinmetrics_daily": "metric date + 24 hours",
+      "coinbase_daily": "candle start + 24 hours"
+    }
+  }
+}

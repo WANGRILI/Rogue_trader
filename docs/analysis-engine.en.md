@@ -54,7 +54,9 @@ On-chain coverage includes:
 - BTC hash rate, difficulty, activity, and miner revenue;
 - Pi Cycle, NVT, funding rates, CME gaps, and Fear & Greed.
 
-Free public data is often appropriate for current research, but it may not satisfy strict point-in-time historical backtesting requirements.
+Free public data is often appropriate for current research, but it may not satisfy strict point-in-time historical backtesting requirements. The development runtime now classifies tools as date-bounded or snapshot-required. A current-day run records sanitized arguments, response hashes, and private snapshots under `数据血缘.json` / `数据快照/`. An analysis of an earlier date automatically enters strict mode and fails closed when a current-state API lacks a same-date, same-parameter snapshot.
+
+These artifacts remain inside Git-ignored run directories and redact sensitive arguments. Their purpose is to establish what the model actually saw at decision time—not to inject today's observable data into an old report.
 
 ## Model Tiers
 

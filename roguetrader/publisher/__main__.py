@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from roguetrader.output_paths import RUN_RESULTS_DIR
+from roguetrader.publisher.execution_csv import ExecutionPlanCsvSink
 from roguetrader.publisher.loader import load_completed_run
 from roguetrader.publisher.models import render_message
 from roguetrader.publisher.service import LocalPublisher
@@ -95,7 +96,10 @@ def make_publisher(args: argparse.Namespace) -> LocalPublisher:
     message_dir = args.message_dir or summary_root / "消息"
     # CSV is always the durable publication boundary.  "message-only" means
     # no additional channel beyond the local CSV-backed message package.
-    sinks = [CsvDecisionSink(csv_path)]
+    sinks = [
+        CsvDecisionSink(csv_path),
+        ExecutionPlanCsvSink(summary_root / "参数化委托.csv", results_root),
+    ]
     if not getattr(args, "csv_only", False):
         sinks.append(LocalMessageSink(message_dir))
     return LocalPublisher(PublicationState(state_dir / "publisher.sqlite3"), sinks)
@@ -148,6 +152,9 @@ def main() -> None:
             state,
             (
                 CsvDecisionSink(results_root / "汇总" / "每日决策.csv"),
+                ExecutionPlanCsvSink(
+                    results_root / "汇总" / "参数化委托.csv", results_root
+                ),
                 FeishuWebhookSink(
                     manager, results_root, automatic=False
                 ),
@@ -193,6 +200,9 @@ def main() -> None:
             state,
             (
                 CsvDecisionSink(results_root / "汇总" / "每日决策.csv"),
+                ExecutionPlanCsvSink(
+                    results_root / "汇总" / "参数化委托.csv", results_root
+                ),
                 FeishuSheetSink(manager, automatic=False),
             ),
         ).publish_run(args.run_dir).to_dict()

@@ -29,7 +29,7 @@ For every enabled symbol, the audit checks:
 2. whether the run directory matches `<start>__asof-<analysis-date>__<lane>__<trigger>-a<attempt>__<symbol>`;
 3. whether `运行索引.json` and `最终决策.json` agree;
 4. whether all reports, state, configuration, terminal log, and stage reports declared by the index exist;
-5. local CSV and local-message delivery;
+5. decision-ledger, parameterized-order-ledger, and local-message delivery;
 6. Feishu group delivery when enabled;
 7. Feishu spreadsheet synchronization when enabled;
 8. the publisher polling thread.
@@ -45,7 +45,7 @@ Failures across multiple symbols are aggregated into one alert rather than flood
 | `analysis_failed` | The process exited with a non-zero code |
 | `result_missing` / `result_incomplete` / `result_invalid` | The run directory, completion marker, or stage outputs are incomplete |
 | `publisher_unavailable` | The publisher thread is not running |
-| `csv_*` / `local_message_*` | The local publication boundary is pending or failed |
+| `csv_*` / `execution_csv_*` / `local_message_*` | The local publication boundary is pending or failed |
 | `feishu_*` | Feishu group configuration or delivery failure |
 | `feishu_sheet_*` | Feishu spreadsheet configuration or synchronization failure |
 

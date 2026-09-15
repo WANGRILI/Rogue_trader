@@ -190,7 +190,13 @@ class PublicationState:
                 "VALUES(?, ?, ?, 'baseline', ?)",
                 (event_id, run_id, str(Path(run_path).resolve()), timestamp),
             )
-            for sink in ("csv", "local_message", "feishu", "feishu_sheet"):
+            for sink in (
+                "csv",
+                "execution_csv",
+                "local_message",
+                "feishu",
+                "feishu_sheet",
+            ):
                 connection.execute(
                     "INSERT OR IGNORE INTO deliveries"
                     "(event_id, sink, status, attempts, updated_at) "
